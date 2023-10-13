@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-enum Events {
+#[serde(untagged)]
+pub enum Event {
     DepthOrderBook(DepthOrderBookEvent),
     PublicTrade(PublicTradeEvent),
 }
