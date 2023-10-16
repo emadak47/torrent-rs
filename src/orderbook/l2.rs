@@ -36,35 +36,6 @@ pub struct OrderbookL2 {
 
 impl OrderbookL2 {
     /// Define a new orderbook template for an exchange's currency pair
-    ///
-    /// ```rust
-    /// # use torrent::orderbook::l2::OrderbookL2;
-    /// let mut orderbook = OrderbookL2::new();
-    /// assert!(orderbook.is_empty());
-    ///
-    /// let level = orderbook.add(Side::BUY, 1, 5);
-    /// assert_eq!(level.price, 1);
-    /// assert_eq!(level.qty, 5);
-    ///
-    /// orderbook.add(Side::SELL, 10, 50);
-    /// assert_eq!(orderbook.asks.len(), 1);
-    ///
-    /// orderbook.add(Side::BUY, 2, 8);
-    /// assert_eq!(orderbook.bids.len(), 2);
-    ///
-    /// let level = orderbook.add(Side::BUY, 1, 4);
-    /// assert_eq!(level.price, 1);
-    /// assert_eq!(level.qty, 4);
-    ///
-    /// let level = orderbook.delete(Side::SELL, 10);
-    /// assert_eq!(level, Some(Level::new(10, 50)));
-    ///
-    /// let level = orderbook.delete(Side::SELL, 10);
-    /// assert_eq!(level, None);
-    ///
-    /// orderbook.clear();
-    /// assert!(orderbook.is_empty());
-    /// ```
     pub fn new() -> Self {
         OrderbookL2 {
             bids: BTreeMap::new(),
@@ -108,5 +79,39 @@ impl OrderbookL2 {
     pub fn clear(&mut self) {
         self.bids.clear();
         self.asks.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn orderbook() {
+        let mut orderbook = OrderbookL2::new();
+        assert!(orderbook.is_empty());
+
+        let level = orderbook.add(Side::BUY, 1, 5);
+        assert_eq!(level.price, 1);
+        assert_eq!(level.qty, 5);
+
+        orderbook.add(Side::SELL, 10, 50);
+        assert_eq!(orderbook.asks.len(), 1);
+
+        orderbook.add(Side::BUY, 2, 8);
+        assert_eq!(orderbook.bids.len(), 2);
+
+        let level = orderbook.add(Side::BUY, 1, 4);
+        assert_eq!(level.price, 1);
+        assert_eq!(level.qty, 4);
+
+        let level = orderbook.delete(Side::SELL, 10);
+        assert_eq!(level, Some(Level::new(10, 50)));
+
+        let level = orderbook.delete(Side::SELL, 10);
+        assert_eq!(level, None);
+
+        orderbook.clear();
+        assert!(orderbook.is_empty());
     }
 }
