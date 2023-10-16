@@ -75,11 +75,14 @@ pub struct SpotWSClient {
 
 impl SpotWSClient {
     #[must_use]
-    pub async fn connect(self) -> Result<Self, Error> {
+    pub async fn connect(
+        self,
+        tx: tokio::sync::mpsc::UnboundedSender<Event>,
+    ) -> Result<Self, Error> {
         let (stream, _) = tokio_tungstenite::connect_async(&self.url)
             .await
             .context("failed to connect to binance wss")?;
-    
+
         let (mut write, read) = stream.split();
 
         if !self.topics.is_empty() {
@@ -93,7 +96,7 @@ impl SpotWSClient {
         }
         let write = Arc::new(Mutex::new(write));
 
-        tokio::spawn(SpotWSClient::run(Arc::clone(&write), read));
+        tokio::spawn(SpotWSClient::run(Arc::clone(&write), read, tx));
 
         Ok(Self {
             url: self.url,
@@ -176,6 +179,7 @@ impl SpotWSClient {
     async fn run(
         write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
         mut read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+        tx: tokio::sync::mpsc::UnboundedSender<Event>,
     ) {
         loop {
             match read.next().await {
@@ -194,7 +198,9 @@ impl SpotWSClient {
 
                             match event {
                                 Event::DepthOrderBook(d) => {
-                                    println!("{}-{}", d.event_type, d.symbol);
+                                    if let Err(e) = tx.send(Event::DepthOrderBook(d)) {
+                                        log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                    }
                                 }
                                 Event::PublicTrade(t) => {
                                     println!("{}-{}", t.event_type, t.symbol);

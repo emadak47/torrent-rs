@@ -78,3 +78,11 @@ pub struct PublicTradeEvent {
     #[serde(skip, rename = "M")]
     pub m_ignore: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderBook {
+    pub last_update_id: u64,
+    pub bids: Vec<Bids>,
+    pub asks: Vec<Asks>,
+}
