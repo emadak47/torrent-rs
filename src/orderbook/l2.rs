@@ -109,19 +109,4 @@ impl OrderbookL2 {
         self.bids.clear();
         self.asks.clear();
     }
-
-    /// Get mid price
-    pub fn get_mid_price(&mut self) -> Option<u64> {
-        let best_bid = self.bids.first_entry();
-        let best_ask = self.asks.last_entry();
-
-        if best_bid.is_some() && best_ask.is_some() {
-            let best_bid = best_bid.unwrap().key().clone();
-            let best_ask = best_ask.unwrap().key().clone();
-
-            return best_bid.checked_add(best_ask);
-        }
-
-        None
-    }
 }
