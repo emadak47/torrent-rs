@@ -1,4 +1,4 @@
-use super::{config::Config, types::Event};
+use super::{super::config::Config, types::Event};
 use failure::{Error, ResultExt};
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -37,7 +37,7 @@ pub struct SpotWSClientBuilder {
 
 impl Default for SpotWSClientBuilder {
     fn default() -> Self {
-        let config = Config::default();
+        let config = Config::binance();
         Self {
             url: config.spot_ws_endpoint.into(),
             topics: Vec::new(),

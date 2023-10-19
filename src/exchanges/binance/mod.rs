@@ -1,6 +1,5 @@
 pub mod spot;
 pub mod orderbook;
-mod config;
 mod types;
 mod errors;
 mod api;

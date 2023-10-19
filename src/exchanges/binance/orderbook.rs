@@ -1,4 +1,5 @@
 use super::{
+    super::config::Config,
     api::{Spot, API},
     client::Client as BinanceClient,
     types::{DepthOrderBookEvent, Event, OrderBook},
@@ -227,7 +228,8 @@ impl BinanceFeedManager {
     ) -> Result<(), Error> {
         let start = std::time::Instant::now();
         loop {
-            match BinanceClient::new("api_key", "secret_key", "https://api.binance.com")
+            let config = Config::binance();
+            match BinanceClient::new("api_key", "secret_key", config.spot_rest_api_endpoint)
                 .get(API::Spot(Spot::Depth), Some(format!("symbol={}", symbol)))
                 .await
             {
