@@ -1,4 +1,5 @@
 use super::{
+    super::config::Config,
     api::{Spot, API},
     client::Client as BinanceClient,
     types::{DepthOrderBookEvent, Event, OrderBook},
@@ -92,8 +93,8 @@ impl BinanceFeedManager {
     }
 
     /// Returns a mutable reference to the [`OrderbookMeta`] corresponding to the symbol key
-    fn get_order_book_meta(&mut self, symbol: &str) -> Option<&mut OrderbookMeta> {
-        self.books.get_mut(symbol)
+    fn get_order_book_meta(&mut self, symbol: impl Into<String>) -> Option<&mut OrderbookMeta> {
+        self.books.get_mut(&symbol.into())
     }
 
     /// Inserts a new [`OrderbookMeta`] instance for the corresponding symbol
@@ -227,7 +228,8 @@ impl BinanceFeedManager {
     ) -> Result<(), Error> {
         let start = std::time::Instant::now();
         loop {
-            match BinanceClient::new("api_key", "secret_key", "https://api.binance.com")
+            let config = Config::binance();
+            match BinanceClient::new("api_key", "secret_key", config.spot_rest_api_endpoint)
                 .get(API::Spot(Spot::Depth), Some(format!("symbol={}", symbol)))
                 .await
             {
@@ -270,15 +272,17 @@ impl BinanceFeedManager {
                                 log::trace!("Resetting binance orderbook book: {}", &symbol);
                                 self.reset(&symbol, None).await?;
                             } else {
+                                // log::trace!("Updating binance orderbook book: {}", &symbol);
                                 self.update(depth).await?;
                             }
                         } else {
                             log::trace!("Inserting new binance orderbook {}", &symbol);
                             self.insert(&depth.symbol);
+                            self.reset(&depth.symbol, None).await?;
                             continue;
                         }
                         let mid_price = self.get_mid_price(&symbol);
-                        log::info!("Mid Price for {}: {:?}", symbol, mid_price);
+                        log::debug!("Mid Price for {}: {:?}", symbol, mid_price);
                     }
                     Event::PublicTrade(_trade) => {}
                 },
