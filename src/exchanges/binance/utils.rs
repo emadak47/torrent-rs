@@ -11,6 +11,7 @@ pub fn get_symbol_pair(symbol: &str) -> CcyPair {
             return CcyPair {
                 base: base.as_str().to_string(),
                 quote: quote.as_str().to_string(),
+                product: "spot".to_string(),
             };
         }
     }

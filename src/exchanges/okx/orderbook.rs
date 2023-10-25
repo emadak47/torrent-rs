@@ -2,24 +2,33 @@ use super::{
     types::{DepthOrderBookEvent, Event},
     utils::get_symbol_pair,
 };
+use crate::exchanges::okx::flatbuffer::event_factory::make_order_book_snapshot_event;
+use crate::exchanges::okx::flatbuffer::event_factory::make_order_book_update_event;
 use crate::common::{Side, ASSET_CONSTANT_MULTIPLIER};
 use crate::orderbook::l2::OrderbookL2;
-
+use zenoh::config::Config as ZenohConfig;
+use zenoh::prelude::sync::*;
 use failure::{Error, ResultExt};
 use std::collections::HashMap;
+use crate::orderbook::l2::Level;
 use std::ops::Div;
 
 pub struct OkxFeedManager {
     // Maintain books for all okx symbols
     books: HashMap<String, OrderbookL2>,
     rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+    zenoh_session: zenoh::Session,
 }
 
 impl OkxFeedManager {
     pub fn new(rx: tokio::sync::mpsc::UnboundedReceiver<Event>) -> Self {
+        // TODO : load the config location from env var
+        let mut conf = ZenohConfig::default();
+        let zenoh_session = zenoh::open(conf).res().unwrap();
         OkxFeedManager {
             books: HashMap::new(),
             rx,
+            zenoh_session,
         }
     }
 
@@ -56,13 +65,17 @@ impl OkxFeedManager {
     }
 
     /// Takes an update event and updates the [`OrderbookL2`] corresponding to the symbol key
-    fn update(&mut self, update: DepthOrderBookEvent) -> Result<(), Error> {
+    fn update(&mut self, update: DepthOrderBookEvent, is_first_update: bool) -> Result<(), Error> {
         let symbol = &update.arg.inst_id;
         let symbol_pair = get_symbol_pair(symbol);
         let multiplier = ASSET_CONSTANT_MULTIPLIER[symbol_pair.quote.as_str()];
 
+        let mut bids_flat: Vec<Level> = Vec::new();
+        let mut asks_flat: Vec<Level> = Vec::new();
+
         // safe unwrap cuz method caller checks that book exists
         let book = self.get_mut(symbol).unwrap();
+        let zenoh_datafeed = keyexpr::new("atrimo/datafeeds").unwrap();
 
         for data in update.data {
             for ask in data.asks {
@@ -85,6 +98,7 @@ impl OkxFeedManager {
                     } else {
                         book.add(Side::SELL, ask_price_u64, ask_qty_u64);
                     }
+                    asks_flat.push(Level::new(ask_price_u64, ask_qty_u64));
                 }
             }
 
@@ -108,10 +122,21 @@ impl OkxFeedManager {
                     } else {
                         book.add(Side::BUY, bid_price_u64, bid_qty_u64);
                     }
+
+                    bids_flat.push(Level::new(bid_price_u64, bid_qty_u64));
                 }
             }
         }
-
+        // Producing
+        if is_first_update {
+            println!("=========> Sending snapshot");
+            let evnt = make_order_book_snapshot_event(bids_flat, asks_flat, symbol_pair);
+            self.zenoh_session.put(zenoh_datafeed, evnt.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("snapshot_event").unwrap()).res().unwrap();
+        } else {
+            println!("=========> Sending update");
+            let evnt = make_order_book_update_event(bids_flat, asks_flat, symbol_pair);
+            self.zenoh_session.put(zenoh_datafeed, evnt.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("update_event").unwrap()).res().unwrap();
+        }
         Ok(())
     }
 
@@ -123,14 +148,14 @@ impl OkxFeedManager {
                         "snapshot" => {
                             log::trace!("Inserting new okx orderbook {}", &d.arg.inst_id);
                             self.insert(&d.arg.inst_id);
-                            self.update(d)?;
+                            self.update(d, true)?;
                         }
                         "update" => {
                             // log::trace!("Updating okx orderbook book: {}", &d.arg.inst_id);
                             let mid_price = self.get_mid_price(&d.arg.inst_id);
                             log::debug!("Mid Price: {:?}", mid_price);
 
-                            self.update(d)?;
+                            self.update(d, false)?;
                         }
                         _a => log::warn!("Received an unpredicted action: {}", _a),
                     },

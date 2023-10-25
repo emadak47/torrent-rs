@@ -5,10 +5,15 @@ use super::{
     types::{DepthOrderBookEvent, Event, OrderBook},
     utils::get_symbol_pair,
 };
+use crate::exchanges::binance::flatbuffer::event_factory::make_order_book_snapshot_event;
+use crate::exchanges::binance::flatbuffer::event_factory::make_order_book_update_event;
 use crate::common::{Side, ASSET_CONSTANT_MULTIPLIER};
 use crate::orderbook::l2::OrderbookL2;
 use failure::{Error, ResultExt};
 use std::{collections::HashMap, ops::Div, thread};
+use zenoh::config::Config as ZenohConfig;
+use zenoh::prelude::sync::*;
+use crate::orderbook::l2::Level;
 
 /// BinanceFuturesUsd: How To Manage A Local OrderBook Correctly: Step 6:
 /// "While listening to the stream, each new event's U should be equal to the
@@ -52,13 +57,17 @@ pub struct BinanceFeedManager {
     // Maintain books for all binance symbols
     books: HashMap<String, OrderbookMeta>,
     rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+    zenoh_session: zenoh::Session,
 }
 
 impl BinanceFeedManager {
     pub fn new(rx: tokio::sync::mpsc::UnboundedReceiver<Event>) -> Self {
+        let mut conf = ZenohConfig::default();
+        let zenoh_session = zenoh::open(conf).res().unwrap();
         BinanceFeedManager {
             books: HashMap::new(),
             rx,
+            zenoh_session,
         }
     }
 
@@ -119,8 +128,12 @@ impl BinanceFeedManager {
         book: OrderBook,
         is_first_update: bool,
     ) -> Result<(), Error> {
+        let mut bids_flat: Vec<Level> = Vec::new();
+        let mut asks_flat: Vec<Level> = Vec::new();
+
         let symbol_pair = get_symbol_pair(&symbol);
         let multiplier = ASSET_CONSTANT_MULTIPLIER[symbol_pair.quote.as_str()];
+        let zenoh_datafeed = keyexpr::new("atrimo/datafeeds").unwrap();
 
         // safe unwrap cuz method caller checks that book exists
         let entry = self.get_order_book_meta(&symbol).unwrap();
@@ -144,6 +157,8 @@ impl BinanceFeedManager {
             } else {
                 entry.book.add(Side::SELL, ask_price_u64, ask_qty_u64);
             }
+
+            asks_flat.push(Level::new(ask_price_u64, ask_qty_u64));
         }
 
         for bid in book.bids {
@@ -163,8 +178,19 @@ impl BinanceFeedManager {
             } else {
                 entry.book.add(Side::BUY, bid_price_u64, bid_qty_u64);
             }
+
+            bids_flat.push(Level::new(bid_price_u64, bid_qty_u64));
         }
 
+        if is_first_update {
+            println!("=========> Sending snapshot");
+            let evnt = make_order_book_snapshot_event(bids_flat, asks_flat, symbol_pair);
+            self.zenoh_session.put(zenoh_datafeed, evnt.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("snapshot_event").unwrap()).res().unwrap();
+        } else {
+            println!("=========> Sending update");
+            let evnt = make_order_book_update_event(bids_flat, asks_flat, symbol_pair);
+            self.zenoh_session.put(zenoh_datafeed, evnt.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("update_event").unwrap()).res().unwrap();
+        }
         Ok(())
     }
 
