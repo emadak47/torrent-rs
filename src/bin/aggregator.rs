@@ -49,6 +49,18 @@ fn main() {
                         };
                         sender.push(ae);
                     },
+                    "price_cli"=>{
+                        println!("cli_event");
+                        data.clear();
+                        for zslice in sample.value.payload.zslices() {
+                            data.extend_from_slice(zslice.as_slice());
+                        }
+                        let ae = ZenohEvent {
+                            streamid: 2,
+                            buff: data.to_vec(),
+                        };
+                        sender.push(ae);
+                    },
                     unknown =>println!("unknown")
                 }
                 unknown=> println!("unknown")

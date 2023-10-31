@@ -279,7 +279,10 @@ impl OrderBookAggregator {
        } else if data.streamid == 1 { // update
            let cloned_buff = data.buff.clone();
            self.update_exchange_book(cloned_buff);
-        }
+       } else if data.streamid == 2 { // CLI event
+           let cloned_buff = data.buff.clone();
+     
+       }
     }
 }
 
