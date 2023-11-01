@@ -81,7 +81,7 @@ impl AggBook {
         }
     }
 
-    pub fn update_event(&mut self, flatbuffers_data: Vec<u8>) {
+    pub fn update_event(&mut self, flatbuffers_data: &Vec<u8>) {
 
         let buffer: Vec<u8> = Vec::new();
         let update = root_as_update_event_message(&flatbuffers_data);
@@ -242,7 +242,7 @@ impl AggBook {
         }
     }
 
-    pub fn snapshot_event(&mut self, flatbuffers_data: Vec<u8>) {
+    pub fn snapshot_event(&mut self, flatbuffers_data: &Vec<u8>) {
 
         let buffer: Vec<u8> = Vec::new();
         let snapshot = root_as_snapshot_event_message(&flatbuffers_data);
@@ -544,7 +544,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };    
 
-        agg_book.snapshot_event(zenoh_event.buff);
+        agg_book.snapshot_event(&zenoh_event.buff);
 
         let book = agg_book.books.get_mut(&currency_pair.to_string()).unwrap(); 
 
@@ -602,7 +602,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };   
 
-        agg_book.update_event(zenoh_event.buff);
+        agg_book.update_event(&zenoh_event.buff);
 
         let book = agg_book.books.get_mut(&currency_pair.to_string()).unwrap(); 
 
@@ -687,7 +687,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };    
 
-        agg_book.snapshot_event(zenoh_event.buff);
+        agg_book.snapshot_event(&zenoh_event.buff);
 
         let book = agg_book.books.get_mut(&currency_pair.to_string()).unwrap(); 
 
