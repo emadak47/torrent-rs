@@ -1,6 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use async_wss::exchanges::binance::flatbuffer::event_factory::make_order_book_snapshot_event as make_binance_snapshot_event;
 use async_wss::exchanges::okx::flatbuffer::event_factory::make_order_book_snapshot_event as make_okx_snapshot_event;
+use async_wss::exchanges::okx::flatbuffer::event_factory::make_order_book_update_event as make_okx_update_event;
 use async_wss::aggregator::ZenohEvent;
 use async_wss::common::CcyPair;
 use async_wss::aggregator_v2::AggBook;
@@ -10,7 +11,7 @@ use async_wss::common::FlatbufferEvent;
 use async_wss::spsc::SPSCQueue;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let (mut sender_prod, mut reciever_prod) = SPSCQueue::new::<FlatbufferEvent>(20);
+    let (mut sender_prod, mut reciever_prod) = SPSCQueue::new::<FlatbufferEvent>(2000000);
     
     // aggregator v2
     let mut agg_book = AggBook::new();
@@ -217,6 +218,115 @@ fn criterion_benchmark(c: &mut Criterion) {
     // run the benchmark for aggregator and aggregator v2 for new okx snapshot event
     c.bench_function("aggregator_v2_test", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
     c.bench_function("aggregator_test", |b| b.iter(|| aggregator.run(&zenoh_event)));
+
+    /*
+    Scenario 3 : 
+        1. Aggregator and Aggregator_v2 for update events
+        2. Average length of update bids and asks in binance and okx is 50 
+    */
+
+    let asks: Vec<Level> = vec![
+        Level { price: 10, qty: 100 },
+        Level { price: 20, qty: 200 },
+        Level { price: 60, qty: 300 },
+        Level { price: 601, qty: 300 },
+        Level { price: 602, qty: 300 },
+        Level { price: 603, qty: 300 },
+        Level { price: 604, qty: 300 },
+        Level { price: 605, qty: 300 },
+        Level { price: 606, qty: 300 },
+        Level { price: 607, qty: 300 },
+        Level { price: 608, qty: 300 },
+        Level { price: 609, qty: 300 },
+        Level { price: 606, qty: 300 },
+        Level { price: 605, qty: 300 },
+        Level { price: 604, qty: 300 },
+        Level { price: 602, qty: 300 },
+        Level { price: 789, qty: 300 },
+        Level { price: 654, qty: 300 },
+        Level { price: 321, qty: 300 },
+        Level { price: 987, qty: 300 },
+        Level { price: 845, qty: 300 },
+        Level { price: 986, qty: 300 },
+        Level { price: 321, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 951, qty: 300 },
+        Level { price: 231, qty: 300 },
+        Level { price: 78, qty: 300 },
+        Level { price: 2, qty: 300 },
+        Level { price: 3, qty: 300 },
+        Level { price: 65, qty: 300 },
+        Level { price: 7, qty: 300 },
+        Level { price: 96, qty: 300 },
+        Level { price: 32, qty: 300 },
+        Level { price: 4, qty: 300 },
+        Level { price: 98, qty: 300 },
+        Level { price: 45, qty: 300 },
+        Level { price: 32, qty: 300 },
+        Level { price: 9874, qty: 300 },
+        Level { price: 9654, qty: 300 },
+        Level { price: 3214, qty: 300 },
+        Level { price: 9654, qty: 300 },
+    ];
+
+    let bids: Vec<Level> = vec![
+        Level { price: 10, qty: 100 },
+        Level { price: 20, qty: 200 },
+        Level { price: 60, qty: 300 },
+        Level { price: 601, qty: 300 },
+        Level { price: 602, qty: 300 },
+        Level { price: 603, qty: 300 },
+        Level { price: 604, qty: 300 },
+        Level { price: 605, qty: 300 },
+        Level { price: 606, qty: 300 },
+        Level { price: 607, qty: 300 },
+        Level { price: 608, qty: 300 },
+        Level { price: 609, qty: 300 },
+        Level { price: 606, qty: 300 },
+        Level { price: 605, qty: 300 },
+        Level { price: 604, qty: 300 },
+        Level { price: 602, qty: 300 },
+        Level { price: 789, qty: 300 },
+        Level { price: 654, qty: 300 },
+        Level { price: 321, qty: 300 },
+        Level { price: 987, qty: 300 },
+        Level { price: 845, qty: 300 },
+        Level { price: 986, qty: 300 },
+        Level { price: 321, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 741, qty: 300 },
+        Level { price: 951, qty: 300 },
+        Level { price: 231, qty: 300 },
+        Level { price: 78, qty: 300 },
+        Level { price: 2, qty: 300 },
+        Level { price: 3, qty: 300 },
+        Level { price: 65, qty: 300 },
+        Level { price: 7, qty: 300 },
+        Level { price: 96, qty: 300 },
+        Level { price: 32, qty: 300 },
+        Level { price: 4, qty: 300 },
+        Level { price: 98, qty: 300 },
+        Level { price: 45, qty: 300 },
+        Level { price: 32, qty: 300 },
+        Level { price: 9874, qty: 300 },
+        Level { price: 9654, qty: 300 },
+        Level { price: 3214, qty: 300 },
+        Level { price: 9654, qty: 300 },
+    ];
+
+    let evnt = make_okx_update_event(bids, asks, currency_pair.clone());
+
+    let zenoh_event = ZenohEvent {
+        streamid: 1, // okx snapshot
+        buff: evnt.buff, // flatbuffers
+    };   
+
+    // Run the aggregator and aggregator v2 benchmark for update event
+    c.bench_function("aggregator_v2_scenario_3", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
+    c.bench_function("aggregator_scenario_3", |b| b.iter(|| aggregator.run(&zenoh_event)));
 }
 
 criterion_group!(benches, criterion_benchmark);
