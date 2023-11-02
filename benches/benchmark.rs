@@ -105,18 +105,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         2. Average length of update bids and asks in binance and okx is 50 
     */
 
-    asks.clear();
-    bids.clear();
-
-    for _ in 0..50 { // average levels in okx
-        let price = rng.gen_range(1..10000);
-        let qty = rng.gen_range(1..1000);
-
-        asks.push(Level { price, qty });
-        bids.push(Level { price, qty });
-    }
-
-    let evnt = make_okx_update_event(bids, asks, currency_pair.clone());
+    let evnt = make_okx_update_event(bids.clone(), asks.clone(), currency_pair.clone());
 
     let zenoh_event = ZenohEvent {
         streamid: 1, // okx snapshot
