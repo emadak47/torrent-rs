@@ -158,6 +158,7 @@ impl OrderBookAggregator {
                         let x = amount - amt;
                         avg += *price * x;
                         impact_price = avg / amount;
+                        return Some(impact_price);
                     } else {
                         amt += metadata.total_qty;
                         avg += *price * metadata.total_qty;
