@@ -23,6 +23,18 @@ pub struct CcyPair {
     pub product: String,
 }
 
+// aggregator pricing details
+pub struct PricingDetails {
+    pub best_bid: f32,
+    pub best_ask: f32,
+    pub worse_bid: f32,
+    pub worse_ask: f32,
+    pub execution_bid: f32,
+    pub execution_ask: f32,
+    pub depth: u64,
+}
+
+
 impl CcyPair {
     pub fn to_string(&self) -> String {
         format!("{}_{}_{}", self.base, self.quote, self.product)

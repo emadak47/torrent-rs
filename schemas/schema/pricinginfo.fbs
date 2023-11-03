@@ -1,0 +1,13 @@
+namespace Atrimo.PricingEvents;
+
+table PricingEvent{
+    best_bid: float;
+    best_ask: float;
+    worse_ask: float;
+    worse_bid: float;
+    execution_bid: float;
+    execution_ask: float;
+    depth: uint64;
+}
+
+root_type PricingEvent;

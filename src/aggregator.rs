@@ -13,8 +13,42 @@ use crate::common::CcyPair;
 use crate::spsc::SPSCQueue;
 use crate::exchanges::binance::flatbuffer::event_factory::make_order_book_snapshot_event as make_binance_snapshot_event;
 use crate::exchanges::okx::flatbuffer::event_factory::make_order_book_snapshot_event as make_okx_snapshot_event;
+use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::PricingEvent;
+use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::PricingEventArgs;
+use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::finish_pricing_event_buffer;
+use crate::common::PricingDetails;
+
 type Exchange = String;
 type ExchangeQty = u64;
+
+#[allow(dead_code)]
+pub fn make_pricing_event_aggregator(
+    details: &PricingDetails,
+    instrument: String,
+) -> FlatbufferEvent {
+    let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
+
+
+    let pricing_event_message = PricingEvent::create(
+        &mut builder,
+        &PricingEventArgs {
+            best_bid: details.best_bid,
+            best_ask: details.best_ask,
+            worse_bid: details.worse_bid,
+            worse_ask: details.worse_ask,
+            execution_bid: details.execution_bid,
+            execution_ask: details.execution_ask,
+            depth: details.depth,
+        },
+    );
+
+    finish_pricing_event_buffer(&mut builder, pricing_event_message);
+    let buffer = builder.finished_data().to_vec();
+    FlatbufferEvent {
+        stream_id: 3,
+        buff: buffer,
+    }
+}
 
 pub struct ZenohEvent {
     pub streamid: u8,
@@ -85,6 +119,78 @@ impl OrderBookAggregator {
         } else {
             //println!("No asks in the book.");
             None
+        }
+    }
+
+    fn get_worse_ask(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(&instrument).unwrap(); 
+        if let Some((best_price, meta)) = book.ask_book.iter().rev().next() {
+            //println!("Best Ask Price: {}", best_ask_price);
+            Some((*best_price, meta))
+        } else {
+            //println!("No asks in the book.");
+            None
+        }
+    }
+
+    fn get_worse_bid(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(&instrument).unwrap(); 
+        if let Some((best_price, meta)) = book.bid_book.iter().rev().last() {
+            //println!("Best Ask Price: {}", best_ask_price);
+            Some((*best_price, meta))
+        } else {
+            //println!("No asks in the book.");
+            None
+        }
+    }
+
+    fn get_execution_bid(&mut self, instrument: String, amount: Option<u64>) -> Option<u64> {
+        let book = self.books.get_mut(&instrument)?;
+    
+        match amount {
+            Some(amount) => {
+                let mut amt = 0;
+                let mut avg = 0;
+                let mut impact_price = 0;
+    
+                for (price, metadata) in book.bid_book.iter().rev() {
+                    if amt + metadata.total_qty >= amount {
+                        let x = amount - amt;
+                        avg += *price * x;
+                        impact_price = avg / amount;
+                    } else {
+                        amt += metadata.total_qty;
+                        avg += *price * metadata.total_qty;
+                    }
+                }
+                return Some(impact_price);
+            }
+            None => Some(self.get_best_ask(instrument).unwrap().0), 
+        }
+    }
+
+    fn get_execution_ask(&mut self, instrument: String, amount: Option<u64>) -> Option<u64> {
+        let book = self.books.get_mut(&instrument)?;
+    
+        match amount {
+            Some(amount) => {
+                let mut amt = 0;
+                let mut avg = 0;
+                let mut impact_price = 0;
+                for (price, metadata) in book.ask_book.iter() {
+                    if amt + metadata.total_qty >= amount {
+                        let x = amount - amt;
+                        avg += *price * x;
+                        impact_price = avg / amount;
+                        return Some(impact_price);
+                    } else {
+                        amt += metadata.total_qty;
+                        avg += *price * metadata.total_qty;
+                    }
+                }
+                return Some(impact_price);
+            }
+            None => Some(self.get_best_bid(instrument).unwrap().0), 
         }
     }
 
@@ -279,7 +385,7 @@ impl OrderBookAggregator {
        } else if data.streamid == 1 { // update
            let cloned_buff = data.buff.clone();
            self.update_exchange_book(cloned_buff);
-       } else if data.streamid == 2 { // CLI event
+       } else if data.streamid == 2 { // Pricing Details
            let cloned_buff = data.buff.clone();
      
        }
@@ -546,5 +652,53 @@ mod tests {
             assert_eq!(600, *level2.exchanges_quantities.get("okx").unwrap());
             assert_eq!(3000, *level2.exchanges_quantities.get("binance").unwrap());
         }
+    }
+    #[test]
+    fn test_events() {
+        // Testing PricingDetails event
+        let (mut sender_prod, mut reciever_prod) = SPSCQueue::new::<FlatbufferEvent>(20);
+        let mut aggregator = OrderBookAggregator::new(sender_prod);
+        
+        /********************************* Snapshot Event 1 *********************************/
+        /********************************* Binance *********************************/
+        let asks: Vec<Level> = vec![
+            Level { price: 40, qty: 80 },
+            Level { price: 50, qty: 200 },
+            Level { price: 60, qty: 300 },
+        ];
+    
+        let bids: Vec<Level> = vec![
+            Level { price: 10, qty: 100 },
+            Level { price: 20, qty: 200 },
+            Level { price: 30, qty: 300 },
+        ];
+    
+        let currency_pair = CcyPair {
+            base: String::from("btc"),
+            quote: String::from("usd"),
+            product: String::from("spot"),
+        };  
+        
+        let evnt = make_binance_snapshot_event(bids, asks, currency_pair.clone());
+
+        let zenoh_event = ZenohEvent {
+            streamid: 0, // snapshot
+            buff: evnt.buff, // flatbuffers
+        };   
+         
+        aggregator.run(&zenoh_event);
+
+        let result = aggregator.get_execution_ask(currency_pair.to_string(), Some(100)).unwrap();
+        assert_eq!(result, 42);
+        let result = aggregator.get_execution_bid(currency_pair.to_string(), Some(100)).unwrap();
+        assert_eq!(result, 60);
+        let result = aggregator.get_best_ask(currency_pair.to_string()).unwrap().0;
+        assert_eq!(result, 40);
+        let result = aggregator.get_best_bid(currency_pair.to_string()).unwrap().0;
+        assert_eq!(result, 30);
+        let result = aggregator.get_worse_bid(currency_pair.to_string()).unwrap().0;
+        assert_eq!(result, 10);
+        let result = aggregator.get_worse_ask(currency_pair.to_string()).unwrap().0;
+        assert_eq!(result, 60);
     }
 }

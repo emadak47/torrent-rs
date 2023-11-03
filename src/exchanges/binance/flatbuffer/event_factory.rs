@@ -182,3 +182,4 @@ pub fn make_order_book_snapshot_event_aggregator(
         buff: buffer,
     }
 }
+
