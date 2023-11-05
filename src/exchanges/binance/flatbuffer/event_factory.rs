@@ -128,11 +128,11 @@ pub fn make_order_book_snapshot_event(
 pub fn make_order_book_snapshot_event_aggregator(
     bids: Vec<Level>,
     asks: Vec<Level>,
-    instrument: String,
+    instrument: &str,
 ) -> FlatbufferEvent {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
     let exchange_name = builder.create_string("");
-    let instrument_name = builder.create_string(&instrument);
+    let instrument_name = builder.create_string(instrument);
 
     let mut bid_offsets = Vec::new();
     let mut ask_offsets = Vec::new();

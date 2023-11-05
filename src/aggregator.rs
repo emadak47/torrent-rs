@@ -235,43 +235,43 @@ impl OrderBookAggregator {
         self.producer_queue.push(evnt);
     }
 
-    fn clean_bid_book(&mut self, instrument: String, prices_to_remove: &Vec<Price>) {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn clean_bid_book(&mut self, instrument: &str, prices_to_remove: &Vec<Price>) {
+        let book = self.books.get_mut(instrument).unwrap(); 
         for &price in prices_to_remove.iter() {
             book.bid_book.remove(&price);
         }
     }
 
-    fn clean_ask_book(&mut self, instrument: String, prices_to_remove: &Vec<Price>) {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn clean_ask_book(&mut self, instrument: &str, prices_to_remove: &Vec<Price>) {
+        let book = self.books.get_mut(instrument).unwrap(); 
         for &price in prices_to_remove.iter() {
             book.ask_book.remove(&price);
         }
     }
 
-    fn make_snapshot_event(&mut self, instrument: String) {
+    fn make_snapshot_event(&mut self, instrument: &str) {
         let mut bids_flat: Vec<Level> = Vec::new();
         let mut asks_flat: Vec<Level> = Vec::new();
 
-        if let Some(book) = self.books.get_mut(&instrument) {
+        if let Some(book) = self.books.get_mut(instrument) {
             for (price, metadata) in book.bid_book.iter().rev() {
                 bids_flat.push(Level::new(*price, metadata.total_qty));   
             }
             for (price, metadata) in book.ask_book.iter() {
                 asks_flat.push(Level::new(*price, metadata.total_qty));
             }
-            let evnt = make_order_book_snapshot_event_aggregator(bids_flat, asks_flat, instrument.clone());
+            let evnt = make_order_book_snapshot_event_aggregator(bids_flat, asks_flat, instrument);
             self.producer_queue.push(evnt);
         }
     }
 
     // Whenever new snapshot events comes for particular exchange this gets called
-    fn reset_exchange_book(&mut self, flatbuffers_data: Vec<u8>) {
+    fn reset_exchange_book(&mut self, flatbuffers_data: &Vec<u8>) {
         
-        let snapshot = root_as_snapshot_event_message(&flatbuffers_data);
+        let snapshot = root_as_snapshot_event_message(flatbuffers_data);
         let SnapshotEvent_ = snapshot.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
-        let instrument = SnapshotEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument();
-        let exchange = SnapshotEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange();
+        let instrument = SnapshotEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
+        let exchange = SnapshotEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
         let Snapshot_ = SnapshotEvent_.expect("UNABLE TO PARSE SNAPSHOT").snapshot(); 
         let bids_ = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT BIDS").bids();
         let asks_ = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT ASKS").asks();
@@ -279,10 +279,10 @@ impl OrderBookAggregator {
         let mut bid_prices_to_remove = Vec::new();
         let mut ask_prices_to_remove = Vec::new();
 
-        if let Some(book) = self.books.get_mut(&instrument.unwrap().to_string()) {
+        if let Some(book) = self.books.get_mut(instrument) {
             // Reset the bid book for particular exchange
             for (price, metadata) in book.bid_book.iter_mut() {
-                if let Some(qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                if let Some(qty) = metadata.exchanges_quantities.get_mut(exchange) {
                     if *qty != 0 {
                         metadata.total_qty -= *qty;
                         *qty = 0;
@@ -294,7 +294,7 @@ impl OrderBookAggregator {
             }   
             // Reset the ask book for particular exchange
             for (price, metadata) in book.ask_book.iter_mut() {
-                if let Some(qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                if let Some(qty) = metadata.exchanges_quantities.get_mut(exchange) {
                     if *qty != 0 {
                         metadata.total_qty -= *qty;
                         *qty = 0;
@@ -307,29 +307,29 @@ impl OrderBookAggregator {
             }
         } else {
             let mut new_book = Book::new();
-            self.books.insert(instrument.unwrap().to_string(), new_book);
+            self.books.insert(instrument.to_string(), new_book);
         }
 
-        self.clean_ask_book(instrument.unwrap().to_string(), &ask_prices_to_remove);
+        self.clean_ask_book(instrument, &ask_prices_to_remove);
         ask_prices_to_remove.clear();
-        self.clean_bid_book(instrument.unwrap().to_string(), &bid_prices_to_remove);
+        self.clean_bid_book(instrument, &bid_prices_to_remove);
         bid_prices_to_remove.clear();
 
-        let book = self.books.get_mut(&instrument.unwrap().to_string()).unwrap(); 
+        let book = self.books.get_mut(instrument).unwrap(); 
 
         // insert the snapshot
         for bid in bids_ {
             for i in 0..bid.len() {
                 if let Some(metadata) = book.bid_book.get_mut(&bid.get(i).price()) {
-                    if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                    if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
                         metadata.total_qty -= *exchange_qty;
                     }
                     metadata.total_qty += bid.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), bid.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), bid.get(i).qty());
                 } else {
                     let mut metadata = Metadata::new();
                     metadata.total_qty = bid.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), bid.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), bid.get(i).qty());
                     book.bid_book.insert(bid.get(i).price(), metadata);
                 }
             }
@@ -338,15 +338,15 @@ impl OrderBookAggregator {
         for ask in asks_ {
             for i in 0..ask.len() {
                 if let Some(metadata) = book.ask_book.get_mut(&ask.get(i).price()) {
-                    if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                    if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
                         metadata.total_qty -= *exchange_qty;
                     }
                     metadata.total_qty += ask.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), ask.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), ask.get(i).qty());
                 } else {
                     let mut metadata = Metadata::new();
                     metadata.total_qty = ask.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), ask.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), ask.get(i).qty());
                     book.ask_book.insert(ask.get(i).price(), metadata);
                 }
             }
@@ -354,37 +354,37 @@ impl OrderBookAggregator {
     }
 
     // whenever new update event comes for a particular exchange it calls this function
-    fn update_exchange_book(&mut self,flatbuffers_data: Vec<u8>) {
+    fn update_exchange_book(&mut self,flatbuffers_data: &Vec<u8>) {
 
-        let update = root_as_update_event_message(&flatbuffers_data);
+        let update = root_as_update_event_message(flatbuffers_data);
         let UpdateEvent_ = update.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
-        let instrument = UpdateEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument();
-        let exchange = UpdateEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange();
+        let instrument = UpdateEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
+        let exchange = UpdateEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
         let update_ = UpdateEvent_.expect("UNABLE TO PARSE UPDATE").update(); 
         let bids_ = update_.expect("UNABLE TO PARSE UPDATE BIDS").bids();
         let asks_ = update_.expect("UNABLE TO PARSE UPDATE ASKS").asks();
         
-        let book = self.books.get_mut(&instrument.unwrap().to_string()).unwrap(); 
+        let book = self.books.get_mut(instrument).unwrap(); 
         
         for bid in bids_ {
             for i in 0..bid.len() {
                 if let Some(metadata) = book.bid_book.get_mut(&bid.get(i).price()) {
                     if bid.get(i).qty() == 0 {
-                        if let Some(qty_) = metadata.exchanges_quantities.get(&exchange.unwrap().to_string()) {
+                        if let Some(qty_) = metadata.exchanges_quantities.get(exchange) {
                             metadata.total_qty -= *qty_;
-                            metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), 0);
+                            metadata.exchanges_quantities.insert(exchange.to_string(), 0);
                         }
                     } else {
-                        if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                        if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
                             metadata.total_qty -= *exchange_qty;
                         }
                         metadata.total_qty += bid.get(i).qty();
-                        metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), bid.get(i).qty());
+                        metadata.exchanges_quantities.insert(exchange.to_string(), bid.get(i).qty());
                     }
                 } else {
                     let mut metadata = Metadata::new();
                     metadata.total_qty = bid.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), bid.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), bid.get(i).qty());
                     book.bid_book.insert(bid.get(i).price(), metadata);
                 }
             }
@@ -394,40 +394,38 @@ impl OrderBookAggregator {
             for i in 0..ask.len() {
                 if let Some(metadata) = book.ask_book.get_mut(&ask.get(i).price()) {
                     if ask.get(i).qty() == 0 {
-                        if let Some(qty_) = metadata.exchanges_quantities.get(&exchange.unwrap().to_string()) {
+                        if let Some(qty_) = metadata.exchanges_quantities.get(exchange) {
                             metadata.total_qty -= *qty_;
-                            metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), 0);
+                            metadata.exchanges_quantities.insert(exchange.to_string(), 0);
                         }
                     } else {
-                        if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(&exchange.unwrap().to_string()) {
+                        if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
                             metadata.total_qty -= *exchange_qty;
                         }
                         metadata.total_qty += ask.get(i).qty();
-                        metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), ask.get(i).qty());
+                        metadata.exchanges_quantities.insert(exchange.to_string(), ask.get(i).qty());
                     }
                 } else {
                     let mut metadata = Metadata::new();
                     metadata.total_qty = ask.get(i).qty();
-                    metadata.exchanges_quantities.insert(exchange.unwrap().to_string(), ask.get(i).qty());
+                    metadata.exchanges_quantities.insert(exchange.to_string(), ask.get(i).qty());
                     book.ask_book.insert(ask.get(i).price(), metadata);
                 }
             }
         }
         
-        self.make_snapshot_event(instrument.unwrap().to_string());
+        self.make_snapshot_event(instrument);
         //self.get_best_bid(instrument.unwrap().to_string());
         //self.print_best_ask(instrument.unwrap().to_string());
     }
 
     pub fn run(&mut self, data: &ZenohEvent) {
         if data.streamid == 0 { // snapshot
-            let cloned_buff = data.buff.clone();
-            self.reset_exchange_book(cloned_buff);
+            self.reset_exchange_book(&data.buff);
        } else if data.streamid == 1 { // update
-           let cloned_buff = data.buff.clone();
-           self.update_exchange_book(cloned_buff);
+           self.update_exchange_book(&data.buff);
        } else if data.streamid == 2 { // Pricing Details
-           let cloned_buff = data.buff.clone();
+
        }
     }
 }
