@@ -89,7 +89,11 @@ fn main() {
         loop {
             match reciever_prod.pop() {
                 Ok(event) => {
-                    session.put(datafeed, event.buff.clone()).res().unwrap();
+                    if(event.stream_id == 3) {
+                        session.put(datafeed, event.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("pricingDetails").unwrap()).res().unwrap();
+                    } else {
+                        session.put(datafeed, event.buff.clone()).res().unwrap();
+                    }
                 }
                 Err(QueueError::EmptyQueue) => {}
             }

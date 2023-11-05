@@ -17,6 +17,7 @@ use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::
 use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::PricingEventArgs;
 use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::finish_pricing_event_buffer;
 use crate::common::PricingDetails;
+use crate::common::ASSET_CONSTANT_MULTIPLIER;
 
 type Exchange = String;
 type ExchangeQty = u64;
@@ -24,7 +25,7 @@ type ExchangeQty = u64;
 #[allow(dead_code)]
 pub fn make_pricing_event_aggregator(
     details: &PricingDetails,
-    instrument: String,
+    instrument: &str,
 ) -> FlatbufferEvent {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
 
@@ -100,8 +101,8 @@ impl OrderBookAggregator {
         }
     }
     
-    fn get_best_bid(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn get_best_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(instrument).unwrap(); 
         if let Some((best_price, meta)) = book.bid_book.iter().next_back() {
             //println!("Best Bid Price: {}", best_bid_price);
             Some((*best_price, meta))
@@ -111,8 +112,8 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_best_ask(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn get_best_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(instrument).unwrap(); 
         if let Some((best_price, meta)) = book.ask_book.iter().next() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -122,8 +123,8 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_worse_ask(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn get_worse_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(instrument).unwrap(); 
         if let Some((best_price, meta)) = book.ask_book.iter().rev().next() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -133,8 +134,8 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_worse_bid(&mut self, instrument: String)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(&instrument).unwrap(); 
+    fn get_worse_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
+        let book = self.books.get_mut(instrument).unwrap(); 
         if let Some((best_price, meta)) = book.bid_book.iter().rev().last() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -144,8 +145,8 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_execution_bid(&mut self, instrument: String, amount: Option<u64>) -> Option<u64> {
-        let book = self.books.get_mut(&instrument)?;
+    fn get_execution_bid(&mut self, instrument: &str, amount: Option<u64>) -> Option<u64> {
+        let book = self.books.get_mut(instrument)?;
     
         match amount {
             Some(amount) => {
@@ -170,8 +171,8 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_execution_ask(&mut self, instrument: String, amount: Option<u64>) -> Option<u64> {
-        let book = self.books.get_mut(&instrument)?;
+    fn get_execution_ask(&mut self, instrument: &str, amount: Option<u64>) -> Option<u64> {
+        let book = self.books.get_mut(instrument)?;
     
         match amount {
             Some(amount) => {
@@ -193,6 +194,45 @@ impl OrderBookAggregator {
             }
             None => Some(self.get_best_bid(instrument).unwrap().0), 
         }
+    }
+
+    fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) {
+        let mut parts = instrument.split('_');
+        let base = parts.next().unwrap();
+        let quote = parts.next().unwrap();
+        let quoteMultiplier = ASSET_CONSTANT_MULTIPLIER[quote];
+        let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
+
+        let best_bid_price = self.get_best_bid(instrument).map(|(price, _)| price).unwrap_or(0);
+        let best_bid_price = (best_bid_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let best_ask_price = self.get_best_ask(instrument).map(|(price, _)| price).unwrap_or(0);
+        let best_ask_price = (best_ask_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let worse_ask_price = self.get_worse_ask(instrument).map(|(price, _)| price).unwrap_or(0);
+        let worse_ask_price = (worse_ask_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let worse_bid_price = self.get_worse_bid(instrument).map(|(price, _)| price).unwrap_or(0);
+        let worse_bid_price = (worse_bid_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let execution_bid_price = self.get_execution_bid(instrument, amount).unwrap_or(0);
+        let execution_bid_price = (execution_bid_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let execution_ask_price = self.get_execution_ask(instrument, amount).unwrap_or(0);
+        let execution_ask_price = (execution_ask_price as f32 / quoteMultiplier as f32) as f32;
+        
+        let pricing_details = PricingDetails {
+            best_bid: best_bid_price,
+            best_ask: best_ask_price,
+            worse_bid: worse_bid_price,
+            worse_ask: worse_ask_price,
+            execution_bid: execution_bid_price,
+            execution_ask: execution_ask_price, 
+            depth: 0,
+        };
+
+        let evnt = make_pricing_event_aggregator(&pricing_details, instrument);
+        self.producer_queue.push(evnt);
     }
 
     fn clean_bid_book(&mut self, instrument: String, prices_to_remove: &Vec<Price>) {
@@ -388,7 +428,6 @@ impl OrderBookAggregator {
            self.update_exchange_book(cloned_buff);
        } else if data.streamid == 2 { // Pricing Details
            let cloned_buff = data.buff.clone();
-     
        }
     }
 }
