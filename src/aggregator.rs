@@ -452,13 +452,15 @@ mod tests {
             Level { price: 30, qty: 300 },
         ];
     
-        let currency_pair = CcyPair {
+        let currencyPair = CcyPair {
             base: String::from("btc"),
             quote: String::from("usd"),
             product: String::from("spot"),
         };  
+
+        let currency_pair = currencyPair.to_string();
         
-        let evnt = make_binance_snapshot_event(bids, asks, currency_pair.clone());
+        let evnt = make_binance_snapshot_event(bids, asks, currencyPair.clone());
         
         let zenoh_event = ZenohEvent {
             streamid: 0, // snapshot
@@ -468,13 +470,13 @@ mod tests {
         aggregator.run(&zenoh_event);
         
         // check the best book details
-        let best_bid = aggregator.get_best_bid(currency_pair.to_string()).unwrap();
+        let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(30, best_bid.0);
         assert_eq!(300, best_bid.1.total_qty);
         // only 1 exchange
         assert_eq!(1, best_bid.1.exchanges_quantities.len());
         
-        let best_ask = aggregator.get_best_ask(currency_pair.to_string()).unwrap();
+        let best_ask = aggregator.get_best_ask(&currency_pair).unwrap();
         assert_eq!(40, best_ask.0);
         assert_eq!(100, best_ask.1.total_qty);
         // only 1 exchange
@@ -494,13 +496,15 @@ mod tests {
             Level { price: 300, qty: 3000 },
         ];
     
-        let currency_pair = CcyPair {
+        let currencyPair = CcyPair {
             base: String::from("btc"),
             quote: String::from("usd"),
             product: String::from("spot"),
         };  
+
+        let currency_pair = currencyPair.to_string();
         
-        let evnt = make_binance_snapshot_event(bids, asks, currency_pair.clone());
+        let evnt = make_binance_snapshot_event(bids, asks, currencyPair.clone());
         
         let zenoh_event = ZenohEvent {
             streamid: 0, // snapshot
@@ -510,13 +514,13 @@ mod tests {
         aggregator.run(&zenoh_event);
 
         // check the best book details again
-        let best_bid = aggregator.get_best_bid(currency_pair.to_string()).unwrap();
+        let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(300, best_bid.0);
         assert_eq!(3000, best_bid.1.total_qty);
         // only 1 exchange
         assert_eq!(1, best_bid.1.exchanges_quantities.len());
         
-        let best_ask = aggregator.get_best_ask(currency_pair.to_string()).unwrap();
+        let best_ask = aggregator.get_best_ask(&currency_pair).unwrap();
         assert_eq!(400, best_ask.0);
         assert_eq!(1000, best_ask.1.total_qty);
         // only 1 exchange
@@ -570,13 +574,15 @@ mod tests {
             Level { price: 30, qty: 1500 }, // updated best bid quantity
         ];
     
-        let currency_pair = CcyPair {
+        let currencyPair = CcyPair {
             base: String::from("btc"),
             quote: String::from("usd"),
             product: String::from("spot"),
         };  
 
-        let evnt = make_binance_update_event(bids, asks, currency_pair.clone());
+        let currency_pair = currencyPair.to_string();
+
+        let evnt = make_binance_update_event(bids, asks, currencyPair.clone());
 
         let zenoh_event = ZenohEvent {
             streamid: 1, // update
@@ -588,18 +594,18 @@ mod tests {
         let elapsed_times = start_times.elapsed();
         println!("Elapsed time: {} nanoseconds", elapsed_times.as_nanos());
         // check the best book details again
-        let best_bid = aggregator.get_best_bid(currency_pair.to_string()).unwrap();
+        let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(30, best_bid.0);
         assert_eq!(1500, best_bid.1.total_qty);
         // only 1 exchange
         assert_eq!(1, best_bid.1.exchanges_quantities.len());
 
-        let best_ask = aggregator.get_best_ask(currency_pair.to_string()).unwrap();
+        let best_ask = aggregator.get_best_ask(&currency_pair).unwrap();
         assert_eq!(40, best_ask.0);
         assert_eq!(1500, best_ask.1.total_qty);
 
         // test each bid levels
-        if let Some(book) = aggregator.books.get(&currency_pair.to_string()) {
+        if let Some(book) = aggregator.books.get(&currency_pair) {
             let bid_book = &book.bid_book;
             let level1 = bid_book.get(&20).unwrap();
             assert_eq!(level1.total_qty, 2000);
@@ -608,7 +614,7 @@ mod tests {
         }
 
         // test each ask levels
-        if let Some(book) = aggregator.books.get(&currency_pair.to_string()) {
+        if let Some(book) = aggregator.books.get(&currency_pair) {
             let ask_book = &book.ask_book;
             let level1 = ask_book.get(&50).unwrap();
             assert_eq!(level1.total_qty, 2000);
@@ -630,13 +636,8 @@ mod tests {
             Level { price: 30, qty: 600 },
         ];
     
-        let currency_pair = CcyPair {
-            base: String::from("btc"),
-            quote: String::from("usd"),
-            product: String::from("spot"),
-        };  
         
-        let evnt = make_okx_snapshot_event(bids, asks, currency_pair.clone());
+        let evnt = make_okx_snapshot_event(bids, asks, currencyPair.clone());
         
         let zenoh_event = ZenohEvent {
             streamid: 0, // snapshot
@@ -645,14 +646,14 @@ mod tests {
          
         aggregator.run(&zenoh_event);
 
-        let best_bid = aggregator.get_best_bid(currency_pair.to_string()).unwrap();
+        let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(30, best_bid.0);
         // 1500 (binance) + 600 (okx)
         assert_eq!(2100, best_bid.1.total_qty);
         // two exchanges
         assert_eq!(2, best_bid.1.exchanges_quantities.len());
 
-        let best_ask = aggregator.get_best_ask(currency_pair.to_string()).unwrap();
+        let best_ask = aggregator.get_best_ask(&currency_pair).unwrap();
         assert_eq!(40, best_ask.0);
         // 1500(binance) + 200 (okx)
         assert_eq!(1700, best_ask.1.total_qty);
@@ -662,7 +663,7 @@ mod tests {
         assert_eq!(1500, *best_ask.1.exchanges_quantities.get("binance").unwrap());
 
         // test each bid levels quanitities
-        if let Some(book) = aggregator.books.get(&currency_pair.to_string()) {
+        if let Some(book) = aggregator.books.get(&currency_pair) {
             let bid_book = &book.bid_book;
             // 2000(binance) + 400(okx)
             let level1 = bid_book.get(&20).unwrap();
@@ -677,7 +678,7 @@ mod tests {
         }
 
         // test each ask levels quanitities
-        if let Some(book) = aggregator.books.get(&currency_pair.to_string()) {
+        if let Some(book) = aggregator.books.get(&currency_pair) {
             let ask_book = &book.ask_book;
             let level1 = ask_book.get(&50).unwrap();
             // 2000(binance) + 400(okx)
@@ -711,13 +712,15 @@ mod tests {
             Level { price: 30, qty: 300 },
         ];
     
-        let currency_pair = CcyPair {
+        let currencyPair = CcyPair {
             base: String::from("btc"),
             quote: String::from("usd"),
             product: String::from("spot"),
         };  
         
-        let evnt = make_binance_snapshot_event(bids, asks, currency_pair.clone());
+        let currency_pair = currencyPair.to_string();
+
+        let evnt = make_binance_snapshot_event(bids, asks, currencyPair.clone());
 
         let zenoh_event = ZenohEvent {
             streamid: 0, // snapshot
@@ -726,17 +729,17 @@ mod tests {
          
         aggregator.run(&zenoh_event);
 
-        let result = aggregator.get_execution_ask(currency_pair.to_string(), Some(100)).unwrap();
+        let result = aggregator.get_execution_ask(&currency_pair, Some(100)).unwrap();
         assert_eq!(result, 42);
-        let result = aggregator.get_execution_bid(currency_pair.to_string(), Some(100)).unwrap();
-        assert_eq!(result, 60);
-        let result = aggregator.get_best_ask(currency_pair.to_string()).unwrap().0;
-        assert_eq!(result, 40);
-        let result = aggregator.get_best_bid(currency_pair.to_string()).unwrap().0;
+        let result = aggregator.get_execution_bid(&currency_pair, Some(100)).unwrap();
         assert_eq!(result, 30);
-        let result = aggregator.get_worse_bid(currency_pair.to_string()).unwrap().0;
+        let result = aggregator.get_best_ask(&currency_pair).unwrap().0;
+        assert_eq!(result, 40);
+        let result = aggregator.get_best_bid(&currency_pair).unwrap().0;
+        assert_eq!(result, 30);
+        let result = aggregator.get_worse_bid(&currency_pair).unwrap().0;
         assert_eq!(result, 10);
-        let result = aggregator.get_worse_ask(currency_pair.to_string()).unwrap().0;
+        let result = aggregator.get_worse_ask(&currency_pair).unwrap().0;
         assert_eq!(result, 60);
     }
 }
