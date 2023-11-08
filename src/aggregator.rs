@@ -196,6 +196,51 @@ impl OrderBookAggregator {
         }
     }
 
+    fn get_total_bid_quantity(&mut self, instrument: &str, level: usize) -> Option<u64> {
+        let book = self.books.get_mut(instrument)?;
+        let result = book.bid_book
+                    .iter()
+                    .rev()
+                    .take(level)
+                    .map(|(_, metadata)| metadata.total_qty) 
+                    .sum();
+        Some(result)
+    }   
+    
+    fn get_total_ask_quantity(&mut self, instrument: &str, level: usize) -> Option<u64> {
+        let book = self.books.get_mut(instrument)?;
+        let result = book.ask_book
+                    .iter()
+                    .take(level)
+                    .map(|(_, metadata)| metadata.total_qty) 
+                    .sum();
+        Some(result)
+    }
+
+    fn get_imbalance(&mut self, instrument: &str) -> Option<Vec<f32>> {
+        let mut parts = instrument.split('_');
+        let base = parts.next().unwrap();
+        let quote = parts.next().unwrap();
+        let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
+
+        let mut imbalances = Vec::new();
+        for level in [1, 25, 50, 100] {
+            let bid_qty = self.get_total_bid_quantity(instrument, level)?;
+            let ask_qty = self.get_total_ask_quantity(instrument, level)?;
+
+            if bid_qty > 0 || ask_qty > 0 {
+                let imbalance = (ask_qty - bid_qty) / (ask_qty + bid_qty);
+                let imbalance = (imbalance as f32 / baseMultiplier as f32) as f32;
+                imbalances.push(imbalance);
+            }
+        }
+        if imbalances.is_empty() {
+            None
+        } else {
+            Some(imbalances)
+        }
+    }
+
     fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) {
         let mut parts = instrument.split('_');
         let base = parts.next().unwrap();
@@ -728,17 +773,32 @@ mod tests {
         };   
          
         aggregator.run(&zenoh_event);
+        
+        // 2 levels total asks quantity
+        let result = aggregator.get_total_ask_quantity(&currency_pair, 2).unwrap(); 
+        assert_eq!(result, 280);
 
+        // 2 levels total bids quantity
+        let result = aggregator.get_total_bid_quantity(&currency_pair, 2).unwrap(); 
+        assert_eq!(result, 500);
+
+        // Execution average ask price
         let result = aggregator.get_execution_ask(&currency_pair, Some(100)).unwrap();
         assert_eq!(result, 42);
+
+        // Execution average bid price
         let result = aggregator.get_execution_bid(&currency_pair, Some(100)).unwrap();
         assert_eq!(result, 30);
+        
         let result = aggregator.get_best_ask(&currency_pair).unwrap().0;
         assert_eq!(result, 40);
+        
         let result = aggregator.get_best_bid(&currency_pair).unwrap().0;
         assert_eq!(result, 30);
+        
         let result = aggregator.get_worse_bid(&currency_pair).unwrap().0;
         assert_eq!(result, 10);
+        
         let result = aggregator.get_worse_ask(&currency_pair).unwrap().0;
         assert_eq!(result, 60);
     }
