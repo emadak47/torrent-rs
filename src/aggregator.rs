@@ -39,6 +39,11 @@ pub fn make_pricing_event_aggregator(
             worse_ask: details.worse_ask,
             execution_bid: details.execution_bid,
             execution_ask: details.execution_ask,
+            imbalance_bbo: details.imbalance_1,
+            imbalance_25: details.imbalance_25,
+            imbalance_50: details.imbalance_50,
+            imbalance_75: details.imbalance_75,
+            imbalance_100: details.imbalance_100,
             depth: details.depth,
         },
     );
@@ -196,41 +201,47 @@ impl OrderBookAggregator {
         }
     }
 
-    fn get_total_bid_quantity(&mut self, instrument: &str, level: usize) -> Option<u64> {
-        let book = self.books.get_mut(instrument)?;
-        let result = book.bid_book
-                    .iter()
-                    .rev()
-                    .take(level)
-                    .map(|(_, metadata)| metadata.total_qty) 
-                    .sum();
-        Some(result)
-    }   
-    
-    fn get_total_ask_quantity(&mut self, instrument: &str, level: usize) -> Option<u64> {
-        let book = self.books.get_mut(instrument)?;
-        let result = book.ask_book
-                    .iter()
-                    .take(level)
-                    .map(|(_, metadata)| metadata.total_qty) 
-                    .sum();
-        Some(result)
-    }
-
-    fn get_imbalance(&mut self, instrument: &str) -> Option<Vec<f32>> {
+    fn get_total_bid_quantity(&mut self, instrument: &str, level: usize) -> Option<f32> {
         let mut parts = instrument.split('_');
         let base = parts.next().unwrap();
         let quote = parts.next().unwrap();
         let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
 
+        let book = self.books.get_mut(instrument)?;
+        let result = book.bid_book
+                    .iter()
+                    .rev()
+                    .take(level)
+                    .map(|(_, metadata)| metadata.total_qty as f32 / baseMultiplier as f32) 
+                    .sum();
+        
+        println!("result {}", result);
+        Some(result)
+    }   
+    
+    fn get_total_ask_quantity(&mut self, instrument: &str, level: usize) -> Option<f32> {
+        let mut parts = instrument.split('_');
+        let base = parts.next().unwrap();
+        let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
+
+        let book = self.books.get_mut(instrument)?;
+        let result = book.ask_book
+                    .iter()
+                    .take(level)
+                    .map(|(_, metadata)| metadata.total_qty as f32 / baseMultiplier as f32) 
+                    .sum();
+        println!("result {}", result);
+        Some(result)
+    }
+
+    fn get_imbalance(&mut self, instrument: &str) -> Option<Vec<f32>> {
         let mut imbalances = Vec::new();
-        for level in [1, 25, 50, 100] {
+
+        for level in [1, 25, 50, 75, 100] {
             let bid_qty = self.get_total_bid_quantity(instrument, level)?;
             let ask_qty = self.get_total_ask_quantity(instrument, level)?;
-
-            if bid_qty > 0 || ask_qty > 0 {
-                let imbalance = (ask_qty - bid_qty) / (ask_qty + bid_qty);
-                let imbalance = (imbalance as f32 / baseMultiplier as f32) as f32;
+            if bid_qty > 0.0 || ask_qty > 0.0 {
+                let imbalance = (ask_qty - bid_qty) as f32 / (ask_qty + bid_qty) as f32;
                 imbalances.push(imbalance);
             }
         }
@@ -265,6 +276,13 @@ impl OrderBookAggregator {
         
         let execution_ask_price = self.get_execution_ask(instrument, amount).unwrap_or(0);
         let execution_ask_price = (execution_ask_price as f32 / quoteMultiplier as f32) as f32;
+
+        let imbalances = self.get_imbalance(instrument).unwrap();
+        let imbalance_1 = imbalances.get(0).cloned().unwrap_or(0.0);
+        let imbalance_25 = imbalances.get(1).cloned().unwrap_or(0.0);
+        let imbalance_50 = imbalances.get(2).cloned().unwrap_or(0.0);
+        let imbalance_75 = imbalances.get(3).cloned().unwrap_or(0.0);
+        let imbalance_100 = imbalances.get(4).cloned().unwrap_or(0.0);
         
         let pricing_details = PricingDetails {
             best_bid: best_bid_price,
@@ -273,6 +291,11 @@ impl OrderBookAggregator {
             worse_ask: worse_ask_price,
             execution_bid: execution_bid_price,
             execution_ask: execution_ask_price, 
+            imbalance_1: imbalance_1,
+            imbalance_25: imbalance_25,
+            imbalance_50: imbalance_50,
+            imbalance_75: imbalance_75,
+            imbalance_100: imbalance_100,
             depth: 0,
         };
 
@@ -776,11 +799,11 @@ mod tests {
         
         // 2 levels total asks quantity
         let result = aggregator.get_total_ask_quantity(&currency_pair, 2).unwrap(); 
-        assert_eq!(result, 280);
+        assert_eq!(result, 0.0000028);
 
         // 2 levels total bids quantity
         let result = aggregator.get_total_bid_quantity(&currency_pair, 2).unwrap(); 
-        assert_eq!(result, 500);
+        assert_eq!(result, 0.000005);
 
         // Execution average ask price
         let result = aggregator.get_execution_ask(&currency_pair, Some(100)).unwrap();
@@ -801,5 +824,47 @@ mod tests {
         
         let result = aggregator.get_worse_ask(&currency_pair).unwrap().0;
         assert_eq!(result, 60);
+
+
+        let asks: Vec<Level> = vec![
+            Level { price: 40, qty: 800000000000 },
+            Level { price: 50, qty: 200000000000 },
+            Level { price: 60, qty: 300000000000 },
+        ];
+    
+        let bids: Vec<Level> = vec![
+            Level { price: 10, qty: 100000000000 },
+            Level { price: 20, qty: 200000000000 },
+            Level { price: 30, qty: 300000000000 },
+        ];
+
+        let currencyPair = CcyPair {
+            base: String::from("BTC"),
+            quote: String::from("USDT"),
+            product: String::from("SPOT"),
+        };  
+
+        let currency_pair = currencyPair.to_string();
+
+        let evnt = make_binance_snapshot_event(bids, asks, currencyPair.clone());
+        
+        let zenoh_event = ZenohEvent {
+            streamid: 0, // snapshot
+            buff: evnt.buff, // flatbuffers
+        };   
+         
+        aggregator.run(&zenoh_event);
+
+        let imbalances = aggregator.get_imbalance(&currency_pair).unwrap();
+        let imbalance_1 = imbalances.get(0).cloned().unwrap_or(0.0);
+        assert_eq!(imbalance_1, 0.45454547);
+        let imbalance_25 = imbalances.get(1).cloned().unwrap_or(0.0);
+        assert_eq!(imbalance_25, 0.36842105);
+        let imbalance_50 = imbalances.get(2).cloned().unwrap_or(0.0);
+        assert_eq!(imbalance_25, 0.36842105);
+        let imbalance_75 = imbalances.get(3).cloned().unwrap_or(0.0);
+        assert_eq!(imbalance_25, 0.36842105);
+        let imbalance_100 = imbalances.get(4).cloned().unwrap_or(0.0);
+        assert_eq!(imbalance_25, 0.36842105);
     }
 }

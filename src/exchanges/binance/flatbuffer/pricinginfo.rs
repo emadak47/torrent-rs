@@ -48,7 +48,12 @@ impl<'a> PricingEvent<'a> {
   pub const VT_WORSE_BID: flatbuffers::VOffsetT = 10;
   pub const VT_EXECUTION_BID: flatbuffers::VOffsetT = 12;
   pub const VT_EXECUTION_ASK: flatbuffers::VOffsetT = 14;
-  pub const VT_DEPTH: flatbuffers::VOffsetT = 16;
+  pub const VT_IMBALANCE_BBO: flatbuffers::VOffsetT = 16;
+  pub const VT_IMBALANCE_25: flatbuffers::VOffsetT = 18;
+  pub const VT_IMBALANCE_50: flatbuffers::VOffsetT = 20;
+  pub const VT_IMBALANCE_75: flatbuffers::VOffsetT = 22;
+  pub const VT_IMBALANCE_100: flatbuffers::VOffsetT = 24;
+  pub const VT_DEPTH: flatbuffers::VOffsetT = 26;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -61,6 +66,11 @@ impl<'a> PricingEvent<'a> {
   ) -> flatbuffers::WIPOffset<PricingEvent<'bldr>> {
     let mut builder = PricingEventBuilder::new(_fbb);
     builder.add_depth(args.depth);
+    builder.add_imbalance_100(args.imbalance_100);
+    builder.add_imbalance_75(args.imbalance_75);
+    builder.add_imbalance_50(args.imbalance_50);
+    builder.add_imbalance_25(args.imbalance_25);
+    builder.add_imbalance_bbo(args.imbalance_bbo);
     builder.add_execution_ask(args.execution_ask);
     builder.add_execution_bid(args.execution_bid);
     builder.add_worse_bid(args.worse_bid);
@@ -114,6 +124,41 @@ impl<'a> PricingEvent<'a> {
     unsafe { self._tab.get::<f32>(PricingEvent::VT_EXECUTION_ASK, Some(0.0)).unwrap()}
   }
   #[inline]
+  pub fn imbalance_bbo(&self) -> f32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f32>(PricingEvent::VT_IMBALANCE_BBO, Some(0.0)).unwrap()}
+  }
+  #[inline]
+  pub fn imbalance_25(&self) -> f32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f32>(PricingEvent::VT_IMBALANCE_25, Some(0.0)).unwrap()}
+  }
+  #[inline]
+  pub fn imbalance_50(&self) -> f32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f32>(PricingEvent::VT_IMBALANCE_50, Some(0.0)).unwrap()}
+  }
+  #[inline]
+  pub fn imbalance_75(&self) -> f32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f32>(PricingEvent::VT_IMBALANCE_75, Some(0.0)).unwrap()}
+  }
+  #[inline]
+  pub fn imbalance_100(&self) -> f32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f32>(PricingEvent::VT_IMBALANCE_100, Some(0.0)).unwrap()}
+  }
+  #[inline]
   pub fn depth(&self) -> u64 {
     // Safety:
     // Created from valid Table for this object
@@ -135,6 +180,11 @@ impl flatbuffers::Verifiable for PricingEvent<'_> {
      .visit_field::<f32>("worse_bid", Self::VT_WORSE_BID, false)?
      .visit_field::<f32>("execution_bid", Self::VT_EXECUTION_BID, false)?
      .visit_field::<f32>("execution_ask", Self::VT_EXECUTION_ASK, false)?
+     .visit_field::<f32>("imbalance_bbo", Self::VT_IMBALANCE_BBO, false)?
+     .visit_field::<f32>("imbalance_25", Self::VT_IMBALANCE_25, false)?
+     .visit_field::<f32>("imbalance_50", Self::VT_IMBALANCE_50, false)?
+     .visit_field::<f32>("imbalance_75", Self::VT_IMBALANCE_75, false)?
+     .visit_field::<f32>("imbalance_100", Self::VT_IMBALANCE_100, false)?
      .visit_field::<u64>("depth", Self::VT_DEPTH, false)?
      .finish();
     Ok(())
@@ -147,6 +197,11 @@ pub struct PricingEventArgs {
     pub worse_bid: f32,
     pub execution_bid: f32,
     pub execution_ask: f32,
+    pub imbalance_bbo: f32,
+    pub imbalance_25: f32,
+    pub imbalance_50: f32,
+    pub imbalance_75: f32,
+    pub imbalance_100: f32,
     pub depth: u64,
 }
 impl<'a> Default for PricingEventArgs {
@@ -159,6 +214,11 @@ impl<'a> Default for PricingEventArgs {
       worse_bid: 0.0,
       execution_bid: 0.0,
       execution_ask: 0.0,
+      imbalance_bbo: 0.0,
+      imbalance_25: 0.0,
+      imbalance_50: 0.0,
+      imbalance_75: 0.0,
+      imbalance_100: 0.0,
       depth: 0,
     }
   }
@@ -194,6 +254,26 @@ impl<'a: 'b, 'b> PricingEventBuilder<'a, 'b> {
     self.fbb_.push_slot::<f32>(PricingEvent::VT_EXECUTION_ASK, execution_ask, 0.0);
   }
   #[inline]
+  pub fn add_imbalance_bbo(&mut self, imbalance_bbo: f32) {
+    self.fbb_.push_slot::<f32>(PricingEvent::VT_IMBALANCE_BBO, imbalance_bbo, 0.0);
+  }
+  #[inline]
+  pub fn add_imbalance_25(&mut self, imbalance_25: f32) {
+    self.fbb_.push_slot::<f32>(PricingEvent::VT_IMBALANCE_25, imbalance_25, 0.0);
+  }
+  #[inline]
+  pub fn add_imbalance_50(&mut self, imbalance_50: f32) {
+    self.fbb_.push_slot::<f32>(PricingEvent::VT_IMBALANCE_50, imbalance_50, 0.0);
+  }
+  #[inline]
+  pub fn add_imbalance_75(&mut self, imbalance_75: f32) {
+    self.fbb_.push_slot::<f32>(PricingEvent::VT_IMBALANCE_75, imbalance_75, 0.0);
+  }
+  #[inline]
+  pub fn add_imbalance_100(&mut self, imbalance_100: f32) {
+    self.fbb_.push_slot::<f32>(PricingEvent::VT_IMBALANCE_100, imbalance_100, 0.0);
+  }
+  #[inline]
   pub fn add_depth(&mut self, depth: u64) {
     self.fbb_.push_slot::<u64>(PricingEvent::VT_DEPTH, depth, 0);
   }
@@ -221,6 +301,11 @@ impl core::fmt::Debug for PricingEvent<'_> {
       ds.field("worse_bid", &self.worse_bid());
       ds.field("execution_bid", &self.execution_bid());
       ds.field("execution_ask", &self.execution_ask());
+      ds.field("imbalance_bbo", &self.imbalance_bbo());
+      ds.field("imbalance_25", &self.imbalance_25());
+      ds.field("imbalance_50", &self.imbalance_50());
+      ds.field("imbalance_75", &self.imbalance_75());
+      ds.field("imbalance_100", &self.imbalance_100());
       ds.field("depth", &self.depth());
       ds.finish()
   }

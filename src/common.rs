@@ -9,6 +9,7 @@ pub static ASSET_CONSTANT_MULTIPLIER: phf::Map<&'static str, f64> = phf_map! {
     "USDT" => 100000000.0,
     "ETH" => 1000000000.0,
     "BTC" => 100000000.0,
+    "btc" => 100000000.0,
 };
 
 pub struct FlatbufferEvent {
@@ -31,6 +32,11 @@ pub struct PricingDetails {
     pub worse_ask: f32,
     pub execution_bid: f32,
     pub execution_ask: f32,
+    pub imbalance_1: f32,
+    pub imbalance_25: f32,
+    pub imbalance_50: f32,
+    pub imbalance_75: f32,
+    pub imbalance_100: f32,
     pub depth: u64,
 }
 
