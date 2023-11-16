@@ -19,7 +19,6 @@ fn main() {
         let datafeed = "atrimo/datafeeds";
         let key_expr = OwnedKeyExpr::from_str(datafeed).unwrap();
         let subscriber = session.declare_subscriber(&key_expr).res().unwrap();
-        let mut data = Vec::new();
         loop {
             let sample = subscriber.recv().unwrap();
 
@@ -27,37 +26,37 @@ fn main() {
                 KnownEncoding::AppCustom => match sample.encoding.suffix() {
                     "update_event"=>{
                         println!("update_event");
-                        data.clear();
+                        let mut data = Vec::new();
                         for zslice in sample.value.payload.zslices() {
                             data.extend_from_slice(zslice.as_slice());
                         }
                         let ae = ZenohEvent {
                             streamid: 1,
-                            buff: data.to_vec(),
+                            buff: data,
                         };
                         sender.push(ae);
                     },
                     "snapshot_event"=>{
                         println!("snapshot_event");
-                        data.clear();
+                        let mut data = Vec::new();
                         for zslice in sample.value.payload.zslices() {
                             data.extend_from_slice(zslice.as_slice());
                         }
                         let ae = ZenohEvent {
                             streamid: 0,
-                            buff: data.to_vec(),
+                            buff: data,
                         };
                         sender.push(ae);
                     },
                     "price_cli"=>{
                         println!("cli_event");
-                        data.clear();
+                        let mut data = Vec::new();
                         for zslice in sample.value.payload.zslices() {
                             data.extend_from_slice(zslice.as_slice());
                         }
                         let ae = ZenohEvent {
                             streamid: 2,
-                            buff: data.to_vec(),
+                            buff: data,
                         };
                         sender.push(ae);
                     },
@@ -74,7 +73,7 @@ fn main() {
         loop {
             match reciever.pop() {
                 Ok(event) => {
-                    aggregator.run(&event);
+                    aggregator.run(event);
                 }
                 Err(QueueError::EmptyQueue) => {}
             }

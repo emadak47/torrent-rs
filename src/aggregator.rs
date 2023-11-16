@@ -334,9 +334,9 @@ impl OrderBookAggregator {
     }
 
     // Whenever new snapshot events comes for particular exchange this gets called
-    fn reset_exchange_book(&mut self, flatbuffers_data: &Vec<u8>) {
+    fn reset_exchange_book(&mut self, flatbuffers_data: Vec<u8>) {
         
-        let snapshot = root_as_snapshot_event_message(flatbuffers_data);
+        let snapshot = root_as_snapshot_event_message(&flatbuffers_data);
         let SnapshotEvent_ = snapshot.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
         let instrument = SnapshotEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
         let exchange = SnapshotEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
@@ -422,9 +422,9 @@ impl OrderBookAggregator {
     }
 
     // whenever new update event comes for a particular exchange it calls this function
-    fn update_exchange_book(&mut self,flatbuffers_data: &Vec<u8>) {
+    fn update_exchange_book(&mut self,flatbuffers_data: Vec<u8>) {
 
-        let update = root_as_update_event_message(flatbuffers_data);
+        let update = root_as_update_event_message(&flatbuffers_data);
         let UpdateEvent_ = update.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
         let instrument = UpdateEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
         let exchange = UpdateEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
@@ -487,13 +487,12 @@ impl OrderBookAggregator {
         //self.print_best_ask(instrument.unwrap().to_string());
     }
 
-    pub fn run(&mut self, data: &ZenohEvent) {
+    pub fn run(&mut self, data: ZenohEvent) {
         if data.streamid == 0 { // snapshot
-            self.reset_exchange_book(&data.buff);
+            self.reset_exchange_book(data.buff);
        } else if data.streamid == 1 { // update
-           self.update_exchange_book(&data.buff);
+           self.update_exchange_book(data.buff);
        } else if data.streamid == 2 { // Pricing Details
-
        }
     }
 }
@@ -535,7 +534,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };    
         
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
         
         // check the best book details
         let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
@@ -579,7 +578,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };    
         
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
 
         // check the best book details again
         let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
@@ -626,7 +625,7 @@ mod tests {
             streamid: 0, // snapshot
             buff: evnt.buff, // flatbuffers
         };    
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
         /********************************* Update Event 1 *********************************/
         /********************************* Binance *********************************/
         
@@ -658,7 +657,7 @@ mod tests {
         };   
         let start_times = Instant::now();
 
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
         let elapsed_times = start_times.elapsed();
         println!("Elapsed time: {} nanoseconds", elapsed_times.as_nanos());
         // check the best book details again
@@ -712,7 +711,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };   
          
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
 
         let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(30, best_bid.0);
@@ -795,7 +794,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };   
          
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
         
         // 2 levels total asks quantity
         let result = aggregator.get_total_ask_quantity(&currency_pair, 2).unwrap(); 
@@ -853,7 +852,7 @@ mod tests {
             buff: evnt.buff, // flatbuffers
         };   
          
-        aggregator.run(&zenoh_event);
+        aggregator.run(zenoh_event);
 
         let imbalances = aggregator.get_imbalance(&currency_pair).unwrap();
         let imbalance_1 = imbalances.get(0).cloned().unwrap_or(0.0);
