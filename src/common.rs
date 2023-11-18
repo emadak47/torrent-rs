@@ -9,7 +9,6 @@ pub static ASSET_CONSTANT_MULTIPLIER: phf::Map<&'static str, f64> = phf_map! {
     "USDT" => 100000000.0,
     "ETH" => 1000000000.0,
     "BTC" => 100000000.0,
-    "btc" => 100000000.0,
 };
 
 pub struct FlatbufferEvent {

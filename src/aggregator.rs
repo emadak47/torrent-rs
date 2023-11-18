@@ -303,18 +303,20 @@ impl OrderBookAggregator {
         self.producer_queue.push(evnt);
     }
 
-    fn clean_bid_book(&mut self, instrument: &str, prices_to_remove: &Vec<Price>) {
+    fn clean_bid_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) {
         let book = self.books.get_mut(instrument).unwrap(); 
         for &price in prices_to_remove.iter() {
             book.bid_book.remove(&price);
         }
+        prices_to_remove.clear();
     }
 
-    fn clean_ask_book(&mut self, instrument: &str, prices_to_remove: &Vec<Price>) {
+    fn clean_ask_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) {
         let book = self.books.get_mut(instrument).unwrap(); 
         for &price in prices_to_remove.iter() {
             book.ask_book.remove(&price);
         }
+        prices_to_remove.clear();
     }
 
     fn make_snapshot_event(&mut self, instrument: &str) {
@@ -378,10 +380,8 @@ impl OrderBookAggregator {
             self.books.insert(instrument.to_string(), new_book);
         }
 
-        self.clean_ask_book(instrument, &ask_prices_to_remove);
-        ask_prices_to_remove.clear();
-        self.clean_bid_book(instrument, &bid_prices_to_remove);
-        bid_prices_to_remove.clear();
+        self.clean_ask_book(instrument, ask_prices_to_remove);
+        self.clean_bid_book(instrument, bid_prices_to_remove);
 
         let book = self.books.get_mut(instrument).unwrap(); 
 
@@ -655,11 +655,8 @@ mod tests {
             streamid: 1, // update
             buff: evnt.buff, // flatbuffers
         };   
-        let start_times = Instant::now();
 
         aggregator.run(zenoh_event);
-        let elapsed_times = start_times.elapsed();
-        println!("Elapsed time: {} nanoseconds", elapsed_times.as_nanos());
         // check the best book details again
         let best_bid = aggregator.get_best_bid(&currency_pair).unwrap();
         assert_eq!(30, best_bid.0);
@@ -780,9 +777,9 @@ mod tests {
         ];
     
         let currencyPair = CcyPair {
-            base: String::from("btc"),
-            quote: String::from("usd"),
-            product: String::from("spot"),
+            base: String::from("BTC"),
+            quote: String::from("USDT"),
+            product: String::from("SPOT"),
         };  
         
         let currency_pair = currencyPair.to_string();
