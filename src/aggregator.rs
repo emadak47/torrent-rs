@@ -97,6 +97,7 @@ impl Book {
 pub struct OrderBookAggregator {
     pub books: HashMap<Symbol, Book>,
     producer_queue: Producer<FlatbufferEvent>,
+    in_sync: bool,
 }
 
 impl OrderBookAggregator {
@@ -104,6 +105,7 @@ impl OrderBookAggregator {
         Self {
             books: HashMap::new(),
             producer_queue: queue,
+            in_sync: true
         }
     }
     
@@ -299,7 +301,9 @@ impl OrderBookAggregator {
         };
 
         let evnt = make_pricing_event_aggregator(&pricing_details, instrument);
-        self.producer_queue.push(evnt);
+        if self.in_sync {
+           self.producer_queue.push(evnt);
+        }
         Some(())
     }
 
@@ -333,20 +337,22 @@ impl OrderBookAggregator {
                 asks_flat.push(Level::new(*price, metadata.total_qty));
             }
             let evnt = make_order_book_snapshot_event_aggregator(bids_flat, asks_flat, instrument);
-            self.producer_queue.push(evnt);
+            if self.in_sync {
+                self.producer_queue.push(evnt);
+            }
         }
     }
 
     // Whenever new snapshot events comes for particular exchange this gets called
-    fn reset_exchange_book(&mut self, flatbuffers_data: Vec<u8>) {
+    fn reset_exchange_book(&mut self, flatbuffers_data: Vec<u8>) -> Result<(), failure::Error>{
         
-        let snapshot = root_as_snapshot_event_message(&flatbuffers_data);
-        let snapshot_event = snapshot.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
+        let root: Result<crate::exchanges::binance::flatbuffer::snapshot::atrimo::snapshot_events::SnapshotEventMessage<'_>, flatbuffers::InvalidFlatbuffer> = root_as_snapshot_event_message(&flatbuffers_data);
+        let snapshot_event = root.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
         let instrument = snapshot_event.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
         let exchange = snapshot_event.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
-        let Snapshot_ = snapshot_event.expect("UNABLE TO PARSE SNAPSHOT").snapshot(); 
-        let bids = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT BIDS").bids();
-        let asks = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT ASKS").asks();
+        let snapshot = snapshot_event.expect("UNABLE TO PARSE SNAPSHOT").snapshot(); 
+        let bids = snapshot.ok_or(failure::format_err!("failure in parsing bids snapshot"))?.bids();
+        let asks = snapshot.ok_or(failure::format_err!("failure in parsing asks snapshot"))?.asks();
 
         let mut bid_prices_to_remove = Vec::new();
         let mut ask_prices_to_remove = Vec::new();
@@ -387,7 +393,7 @@ impl OrderBookAggregator {
         self.clean_ask_book(instrument, ask_prices_to_remove);
         self.clean_bid_book(instrument, bid_prices_to_remove);
 
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument).ok_or(failure::err_msg("Book not found for instrument"))?; 
 
         // insert the snapshot
         for bid in bids {
@@ -422,21 +428,22 @@ impl OrderBookAggregator {
                     book.ask_book.insert(ask.get(i).price(), metadata);
                 }
             }
-        }   
+        }
+        Ok(())   
     }
 
     // whenever new update event comes for a particular exchange it calls this function
     fn update_exchange_book(&mut self,flatbuffers_data: Vec<u8>) {
 
-        let update = root_as_update_event_message(&flatbuffers_data);
-        let update_event = update.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
+        let root = root_as_update_event_message(&flatbuffers_data);
+        let update_event = root.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
         let instrument = update_event.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
         let exchange = update_event.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
-        let update_ = update_event.expect("UNABLE TO PARSE UPDATE").update(); 
-        let bids = update_.expect("UNABLE TO PARSE UPDATE BIDS").bids();
-        let asks = update_.expect("UNABLE TO PARSE UPDATE ASKS").asks();
+        let update = update_event.expect("UNABLE TO PARSE UPDATE").update(); 
+        let bids = update.expect("UNABLE TO PARSE UPDATE BIDS").bids();
+        let asks = update.expect("UNABLE TO PARSE UPDATE ASKS").asks();
         
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument).expect(&format!("Aggregator has not received snapshot update for instrument: {}", instrument));
 
         info!("Exchange : {} Update Event For Symbol {}", exchange, instrument);
 
@@ -494,7 +501,15 @@ impl OrderBookAggregator {
 
     pub fn run(&mut self, data: ZenohEvent) {
         if data.streamid == 0 { // snapshot
-            self.reset_exchange_book(data.buff);
+            match self.reset_exchange_book(data.buff) {
+                Ok(_) => {
+                    self.in_sync = true;
+                }
+                Err(err) => {
+                    self.in_sync = false;
+                    warn!("Error resetting exchange book: {}", err);
+                }
+            }
        } else if data.streamid == 1 { // update
            self.update_exchange_book(data.buff);
        } else if data.streamid == 2 { // Pricing Details
