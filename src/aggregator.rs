@@ -18,6 +18,7 @@ use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::
 use crate::exchanges::binance::flatbuffer::pricinginfo::atrimo::pricing_events::finish_pricing_event_buffer;
 use crate::common::PricingDetails;
 use crate::common::ASSET_CONSTANT_MULTIPLIER;
+use log::{info, trace, warn};
 
 type Exchange = String;
 type ExchangeQty = u64;
@@ -106,35 +107,37 @@ impl OrderBookAggregator {
         }
     }
     
-    fn get_best_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument)?; 
+    fn get_best_bid(&self, instrument: &str) -> Option<(u64, &Metadata)> {
+        let book = self.books.get(instrument)?;
         if let Some((best_price, meta)) = book.bid_book.iter().next_back() {
-            //println!("Best Bid Price: {}", best_bid_price);
             Some((*best_price, meta))
         } else {
-            //println!("No bids in the book.");
             None
         }
     }
-
-    fn get_best_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument)?; 
+    
+    fn get_best_ask(&self, instrument: &str) -> Option<(u64, &Metadata)> {
+        let book = self.books.get(instrument)?;
         if let Some((best_price, meta)) = book.ask_book.iter().next() {
-            //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
         } else {
-            //println!("No asks in the book.");
             None
         }
     }
+    
+    fn calculate_mid_price(&self, instrument: &str) -> Option<u64> {
+        let best_bid = self.get_best_bid(instrument)?;
+        let best_ask = self.get_best_ask(instrument)?;
+    
+        Some((best_bid.0 + best_ask.0) / 2)
+    }
+    
 
     fn get_worse_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
         let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.ask_book.iter().rev().next() {
-            //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
         } else {
-            //println!("No asks in the book.");
             None
         }
     }
@@ -142,10 +145,8 @@ impl OrderBookAggregator {
     fn get_worse_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
         let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.bid_book.iter().rev().last() {
-            //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
         } else {
-            //println!("No asks in the book.");
             None
         }
     }
@@ -250,7 +251,7 @@ impl OrderBookAggregator {
         }
     }
 
-    fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) -> Option<()>{
+    fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) -> Option<()> {
         let mut parts = instrument.split('_');
         let base = parts.next()?;
         let quote = parts.next()?;
@@ -340,15 +341,17 @@ impl OrderBookAggregator {
     fn reset_exchange_book(&mut self, flatbuffers_data: Vec<u8>) {
         
         let snapshot = root_as_snapshot_event_message(&flatbuffers_data);
-        let SnapshotEvent_ = snapshot.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
-        let instrument = SnapshotEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
-        let exchange = SnapshotEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
-        let Snapshot_ = SnapshotEvent_.expect("UNABLE TO PARSE SNAPSHOT").snapshot(); 
-        let bids_ = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT BIDS").bids();
-        let asks_ = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT ASKS").asks();
+        let snapshot_event = snapshot.expect("UNABLE TO PARSE SNAPSHOT EVENT").snapshot_event();
+        let instrument = snapshot_event.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
+        let exchange = snapshot_event.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
+        let Snapshot_ = snapshot_event.expect("UNABLE TO PARSE SNAPSHOT").snapshot(); 
+        let bids = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT BIDS").bids();
+        let asks = Snapshot_.expect("UNABLE TO PARSE SNAPSHOT ASKS").asks();
 
         let mut bid_prices_to_remove = Vec::new();
         let mut ask_prices_to_remove = Vec::new();
+
+        log::info!("Exchange : {} Snapshot Event For Symbol {}", exchange, instrument);
 
         if let Some(book) = self.books.get_mut(instrument) {
             // Reset the bid book for particular exchange
@@ -387,7 +390,7 @@ impl OrderBookAggregator {
         let book = self.books.get_mut(instrument).unwrap(); 
 
         // insert the snapshot
-        for bid in bids_ {
+        for bid in bids {
             for i in 0..bid.len() {
                 if let Some(metadata) = book.bid_book.get_mut(&bid.get(i).price()) {
                     if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
@@ -404,7 +407,7 @@ impl OrderBookAggregator {
             }
         }   
 
-        for ask in asks_ {
+        for ask in asks {
             for i in 0..ask.len() {
                 if let Some(metadata) = book.ask_book.get_mut(&ask.get(i).price()) {
                     if let Some(exchange_qty) = metadata.exchanges_quantities.get_mut(exchange) {
@@ -426,16 +429,18 @@ impl OrderBookAggregator {
     fn update_exchange_book(&mut self,flatbuffers_data: Vec<u8>) {
 
         let update = root_as_update_event_message(&flatbuffers_data);
-        let UpdateEvent_ = update.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
-        let instrument = UpdateEvent_.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
-        let exchange = UpdateEvent_.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
-        let update_ = UpdateEvent_.expect("UNABLE TO PARSE UPDATE").update(); 
-        let bids_ = update_.expect("UNABLE TO PARSE UPDATE BIDS").bids();
-        let asks_ = update_.expect("UNABLE TO PARSE UPDATE ASKS").asks();
+        let update_event = update.expect("UNABLE TO PARSE UPDATE EVENT").update_event();
+        let instrument = update_event.expect("UNABLE TO PARSE INSTRUMENT").instrument().unwrap();
+        let exchange = update_event.expect("UNABLE TO PARSE EXCHANGE").exchange().unwrap();
+        let update_ = update_event.expect("UNABLE TO PARSE UPDATE").update(); 
+        let bids = update_.expect("UNABLE TO PARSE UPDATE BIDS").bids();
+        let asks = update_.expect("UNABLE TO PARSE UPDATE ASKS").asks();
         
         let book = self.books.get_mut(instrument).unwrap(); 
-        
-        for bid in bids_ {
+
+        info!("Exchange : {} Update Event For Symbol {}", exchange, instrument);
+
+        for bid in bids {
             for i in 0..bid.len() {
                 if let Some(metadata) = book.bid_book.get_mut(&bid.get(i).price()) {
                     if bid.get(i).qty() == 0 {
@@ -459,7 +464,7 @@ impl OrderBookAggregator {
             }
         }   
 
-        for ask in asks_ {
+        for ask in asks {
             for i in 0..ask.len() {
                 if let Some(metadata) = book.ask_book.get_mut(&ask.get(i).price()) {
                     if ask.get(i).qty() == 0 {
@@ -484,8 +489,7 @@ impl OrderBookAggregator {
         }
         
         self.make_snapshot_event(instrument);
-        //self.get_best_bid(instrument.unwrap().to_string());
-        //self.print_best_ask(instrument.unwrap().to_string());
+        info!("Aggregator Mid Price : {:?}", self.calculate_mid_price(instrument));
     }
 
     pub fn run(&mut self, data: ZenohEvent) {
