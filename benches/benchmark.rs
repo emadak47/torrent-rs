@@ -55,7 +55,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // benchmark for both aggregator and aggregator_v2 for their first snapshot event from any exchange
     c.bench_function("aggregator_v2_scenario_1", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_1", |b| b.iter(|| aggregator.run(&zenoh_event)));
+    c.bench_function("aggregator_scenario_1", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
 
     /*
     Scenario 2 : 
@@ -75,7 +75,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // fills the aggregator_v2 book with binance 42 levels bids and asks each
     agg_book.snapshot_event(&zenoh_event.buff);   
     // fills the aggregator book with binance 42 levels bids and asks each
-    aggregator.run(&zenoh_event);
+    aggregator.run(zenoh_event);
 
     asks.clear();
     bids.clear();
@@ -97,7 +97,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // run the benchmark for aggregator and aggregator v2 for new okx snapshot event
     c.bench_function("aggregator_v2_scenario_2", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_2", |b| b.iter(|| aggregator.run(&zenoh_event)));
+    c.bench_function("aggregator_scenario_2", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
 
     /*
     Scenario 3 : 
@@ -114,7 +114,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Run the aggregator and aggregator v2 benchmark for update event
     c.bench_function("aggregator_v2_scenario_3", |b| b.iter(|| agg_book.update_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_3", |b| b.iter(|| aggregator.run(&zenoh_event)));
+    c.bench_function("aggregator_scenario_3", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
 }
 
 criterion_group!(benches, criterion_benchmark);

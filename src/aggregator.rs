@@ -55,7 +55,7 @@ pub fn make_pricing_event_aggregator(
         buff: buffer,
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct ZenohEvent {
     pub streamid: u8,
     pub buff: Vec<u8>,
@@ -107,7 +107,7 @@ impl OrderBookAggregator {
     }
     
     fn get_best_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.bid_book.iter().next_back() {
             //println!("Best Bid Price: {}", best_bid_price);
             Some((*best_price, meta))
@@ -118,7 +118,7 @@ impl OrderBookAggregator {
     }
 
     fn get_best_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.ask_book.iter().next() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -129,7 +129,7 @@ impl OrderBookAggregator {
     }
 
     fn get_worse_ask(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.ask_book.iter().rev().next() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -140,7 +140,7 @@ impl OrderBookAggregator {
     }
 
     fn get_worse_bid(&mut self, instrument: &str)-> Option<(u64, &Metadata)> {
-        let book = self.books.get_mut(instrument).unwrap(); 
+        let book = self.books.get_mut(instrument)?; 
         if let Some((best_price, meta)) = book.bid_book.iter().rev().last() {
             //println!("Best Ask Price: {}", best_ask_price);
             Some((*best_price, meta))
@@ -203,8 +203,8 @@ impl OrderBookAggregator {
 
     fn get_total_bid_quantity(&mut self, instrument: &str, level: usize) -> Option<f32> {
         let mut parts = instrument.split('_');
-        let base = parts.next().unwrap();
-        let quote = parts.next().unwrap();
+        let base = parts.next()?;
+        let quote = parts.next()?;
         let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
 
         let book = self.books.get_mut(instrument)?;
@@ -215,13 +215,12 @@ impl OrderBookAggregator {
                     .map(|(_, metadata)| metadata.total_qty as f32 / baseMultiplier as f32) 
                     .sum();
         
-        println!("result {}", result);
         Some(result)
     }   
     
     fn get_total_ask_quantity(&mut self, instrument: &str, level: usize) -> Option<f32> {
         let mut parts = instrument.split('_');
-        let base = parts.next().unwrap();
+        let base = parts.next()?;
         let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
 
         let book = self.books.get_mut(instrument)?;
@@ -230,7 +229,6 @@ impl OrderBookAggregator {
                     .take(level)
                     .map(|(_, metadata)| metadata.total_qty as f32 / baseMultiplier as f32) 
                     .sum();
-        println!("result {}", result);
         Some(result)
     }
 
@@ -252,10 +250,10 @@ impl OrderBookAggregator {
         }
     }
 
-    fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) {
+    fn make_pricing_event(&mut self, instrument: &str, amount: Option<u64>) -> Option<()>{
         let mut parts = instrument.split('_');
-        let base = parts.next().unwrap();
-        let quote = parts.next().unwrap();
+        let base = parts.next()?;
+        let quote = parts.next()?;
         let quoteMultiplier = ASSET_CONSTANT_MULTIPLIER[quote];
         let baseMultiplier = ASSET_CONSTANT_MULTIPLIER[base];
 
@@ -277,7 +275,7 @@ impl OrderBookAggregator {
         let execution_ask_price = self.get_execution_ask(instrument, amount).unwrap_or(0);
         let execution_ask_price = (execution_ask_price as f32 / quoteMultiplier as f32) as f32;
 
-        let imbalances = self.get_imbalance(instrument).unwrap();
+        let imbalances = self.get_imbalance(instrument)?;
         let imbalance_1 = imbalances.get(0).cloned().unwrap_or(0.0);
         let imbalance_25 = imbalances.get(1).cloned().unwrap_or(0.0);
         let imbalance_50 = imbalances.get(2).cloned().unwrap_or(0.0);
@@ -301,22 +299,25 @@ impl OrderBookAggregator {
 
         let evnt = make_pricing_event_aggregator(&pricing_details, instrument);
         self.producer_queue.push(evnt);
+        Some(())
     }
 
-    fn clean_bid_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) {
-        let book = self.books.get_mut(instrument).unwrap(); 
+    fn clean_bid_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) -> Option<()> {
+        let book = self.books.get_mut(instrument)?; 
         for &price in prices_to_remove.iter() {
             book.bid_book.remove(&price);
         }
         prices_to_remove.clear();
+        Some(())
     }
 
-    fn clean_ask_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) {
-        let book = self.books.get_mut(instrument).unwrap(); 
+    fn clean_ask_book(&mut self, instrument: &str, mut prices_to_remove: Vec<Price>) -> Option<()> {
+        let book = self.books.get_mut(instrument)?; 
         for &price in prices_to_remove.iter() {
             book.ask_book.remove(&price);
         }
         prices_to_remove.clear();
+        Some(())
     }
 
     fn make_snapshot_event(&mut self, instrument: &str) {
