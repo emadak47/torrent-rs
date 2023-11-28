@@ -16,7 +16,7 @@ use crate::exchanges::util::get_symbol_pair;
 use crate::common::Side;
 
 pub struct BybitFeedManager {
-    // Maintain books for all okx symbols
+    // Maintain books for all bybit symbols
     books: HashMap<String, OrderbookL2>,
     rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
     zenoh_session: zenoh::Session,
@@ -144,12 +144,12 @@ impl BybitFeedManager {
                 Some(event) => match event {
                     Event::Orderbook(d) => match d.type_.as_ref() {
                         "snapshot" => {
-                            log::trace!("Inserting new okx orderbook {}", &d.data.s);
+                            log::trace!("Inserting new bybit orderbook {}", &d.data.s);
                             self.insert(&d.data.s);
                             self.update(d, true)?;
                         }
                         "delta" => {
-                            // log::trace!("Updating okx orderbook book: {}", &d.arg.inst_id);
+                            // log::trace!("Updating bybit orderbook book: {}", &d.arg.inst_id);
                             let mid_price = self.get_mid_price(&d.data.s);
                             log::debug!("Mid Price: {:?}", mid_price);
                             println!("Mid Price: {:?}", mid_price);
