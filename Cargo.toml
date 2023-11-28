@@ -32,3 +32,18 @@ phf = { version = "0.11", features = ["macros"] }
 
 # Misc
 regex = "1.4"
+
+flatbuffers = "23.1.21"
+
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh.git", features = ["shared-memory"], branch = "master" }
+
+crossbeam-utils = "0.8.16"
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+
+rand = "0.8.5"
+
+[[bench]]
+name = "benchmark"
+harness = false

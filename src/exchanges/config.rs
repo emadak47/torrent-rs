@@ -18,4 +18,11 @@ impl Config {
             spot_ws_endpoint: "wss://ws.okx.com:8443/ws/v5/public".into(),
         }
     }
+
+    pub fn bybit() -> Self {
+        Self {
+            spot_rest_api_endpoint: "https://www.bybit.com/".into(),
+            spot_ws_endpoint: "wss://stream.bybit.com/v5/public/spot".into(),
+        }
+    }
 }
