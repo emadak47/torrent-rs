@@ -7,6 +7,7 @@ pub fn get_symbol_pair(symbol: &str) -> CcyPair {
         return CcyPair {
             base: parts[0].to_string(),
             quote: parts[1].to_string(),
+            product: "spot".to_string(), // TODO : not default
         };
     }
 
