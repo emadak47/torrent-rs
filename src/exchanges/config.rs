@@ -28,8 +28,22 @@ impl Config {
 
     pub fn coinbase() -> Self {
         Self {
-            spot_rest_api_endpoint: "https://www.bybit.com/".into(),
+            spot_rest_api_endpoint: "https://www.coinbase.com/".into(),
             spot_ws_endpoint: "wss://ws-feed.pro.coinbase.com".into(),
+        }
+    }
+
+    pub fn huobi() -> Self {
+        Self {
+            spot_rest_api_endpoint: "https://api.huobi.pro".into(),
+            spot_ws_endpoint: "wss://api.huobi.pro/feed".into(),
+        }
+    }
+
+    pub fn kucoin() -> Self {
+        Self {
+            spot_rest_api_endpoint: "https://api.kucoin.com".into(),
+            spot_ws_endpoint: "wss://ws-api-spot.kucoin.com/".into(),
         }
     }
 }
