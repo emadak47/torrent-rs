@@ -61,7 +61,7 @@ pub struct Level2 {
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::large_enum_variant)]
+#[serde(untagged)]
 pub enum Event {
     OrderBookMsg(WSResp<Level2>),
 }

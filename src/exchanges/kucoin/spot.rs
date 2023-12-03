@@ -209,7 +209,12 @@ impl SpotWSClient {
                                 None => continue,
                                 Some(ev) => ev,
                             };
-                            
+
+                            match event {
+                                Event::OrderBookMsg(d) => {
+                                    
+                                }
+                            }
                         }
                         Message::Ping(_) => {
                             let mut write = write.lock().await;
