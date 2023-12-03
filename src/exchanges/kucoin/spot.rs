@@ -212,7 +212,9 @@ impl SpotWSClient {
 
                             match event {
                                 Event::OrderBookMsg(d) => {
-                                    
+                                    if let Err(e) = tx.send(Event::OrderBookMsg(d)) {
+                                        log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                    }
                                 }
                             }
                         }
