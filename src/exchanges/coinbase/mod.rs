@@ -1,5 +1,4 @@
 pub mod spot;
 pub mod orderbook;
-pub mod flatbuffer;
-mod types;
+pub mod types;
 mod utils;
