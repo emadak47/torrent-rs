@@ -1,12 +1,12 @@
-use super::{super::config::Config, types::Event};
+use super::types::Event;
+use crate::exchanges::Config;
 use failure::{Error, ResultExt};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 
@@ -87,12 +87,12 @@ impl SpotWSClient {
 
         if !self.topics.is_empty() {
             let sub = Sub::new(Methods::Subscribe, Some(&self.topics));
-            let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
+            let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
             write
                 .send(Message::Text(sub_req))
                 .await
-                .expect("failed to send init sub request to stream");
+                .context("failed to send init sub request to stream")?;
         }
         let write = Arc::new(Mutex::new(write));
 
@@ -144,7 +144,7 @@ impl SpotWSClient {
 
         let ref topic = vec![param.clone()];
         let sub = Sub::new(Methods::Subscribe, Some(topic));
-        let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
+        let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;
@@ -165,7 +165,7 @@ impl SpotWSClient {
 
         let ref topic = vec![param.clone()];
         let unsub = Sub::new(Methods::Unsubscribe, Some(topic));
-        let unsub_req = serde_json::to_string(&unsub).expect("failed to serialise sub request");
+        let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;

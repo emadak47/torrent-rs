@@ -1,4 +1,5 @@
-use super::{super::config::Config, types::Event};
+use super::types::Event;
+use crate::exchanges::Config;
 use failure::{Error, ResultExt};
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -87,12 +88,12 @@ impl SpotWSClient {
 
         if !self.topics.is_empty() {
             let sub = Sub::new(Methods::Subscribe, Some(&self.topics), &0);
-            let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
+            let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
             write
                 .send(Message::Text(sub_req))
                 .await
-                .expect("failed to send init sub request to stream");
+                .context("failed to send init sub request to stream")?;
         }
         let write = Arc::new(Mutex::new(write));
 
@@ -138,7 +139,7 @@ impl SpotWSClient {
 
         let ref topic = vec![param.clone()];
         let sub = Sub::new(Methods::Subscribe, Some(topic), &self.id);
-        let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
+        let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;
@@ -161,7 +162,7 @@ impl SpotWSClient {
 
         let ref topic = vec![param.clone()];
         let unsub = Sub::new(Methods::Unsubscribe, Some(topic), &self.id);
-        let unsub_req = serde_json::to_string(&unsub).expect("failed to serialise sub request");
+        let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;
@@ -186,15 +187,25 @@ impl SpotWSClient {
                 Some(res) => match res {
                     Ok(msg) => match msg {
                         Message::Text(msg) => {
-                            let value: serde_json::Value = serde_json::from_str(&msg)
-                                .expect("Failed to serialise msg received from binance WS");
+                            let value: serde_json::Value = match serde_json::from_str(&msg) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    log::error!("Failed to serialise binance msg\n{:?}", e);
+                                    continue;
+                                }
+                            };
 
                             if value.get("result").is_some() && value.get("id").is_some() {
                                 continue;
                             }
 
-                            let event: Event = serde_json::from_str(value.to_string().as_str())
-                                .expect("Failed to serialise binance event");
+                            let event = match serde_json::from_str(value.to_string().as_str()) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    log::error!("Failed to serialise binance event\n{:?}", e);
+                                    continue;
+                                }
+                            };
 
                             match event {
                                 Event::DepthOrderBook(d) => {

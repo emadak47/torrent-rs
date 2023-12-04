@@ -1,111 +1,128 @@
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
-use async_wss::spsc::QueueError;
-use std::str::FromStr;
+use async_wss::{
+    aggregator::Aggregator,
+    common::{FlatbufferEvent, ZenohEvent, DATA_FEED},
+    spsc::{QueueError, SPSCQueue},
+};
 use std::thread;
-use async_wss::aggregator::OrderBookAggregator;
-use async_wss::aggregator::ZenohEvent;
-use async_wss::spsc::SPSCQueue;
-use async_wss::common::FlatbufferEvent;
+use zenoh::{
+    config::Config,
+    key_expr::keyexpr,
+    prelude::{sync::SyncResolve, Encoding, KnownEncoding},
+};
 
 fn main() {
-    let (mut sender, mut reciever) = SPSCQueue::new::<ZenohEvent>(50000);
-    let (mut sender_prod, mut reciever_prod) = SPSCQueue::new::<FlatbufferEvent>(50000);
+    let (mut tx_z, mut rx_z) = SPSCQueue::new::<ZenohEvent>(50000);
+    let (tx_f, mut rx_f) = SPSCQueue::new::<FlatbufferEvent>(50000);
 
     // consumes zenoh events and push to the queue
-    let consumer_thread = thread::spawn(move || {
-        let mut conf = Config::default();
-        let session = zenoh::open(conf).res().unwrap();
-        let datafeed = "atrimo/datafeeds";
-        let key_expr = OwnedKeyExpr::from_str(datafeed).unwrap();
-        let subscriber = session.declare_subscriber(&key_expr).res().unwrap();
-        loop {
-            let sample = subscriber.recv().unwrap();
+    let zenoh_rx_thread = thread::spawn(move || {
+        let conf = Config::default();
+        let session = zenoh::open(conf)
+            .res()
+            .expect("failed to open zenoh session");
+        let key_expr = keyexpr::new(DATA_FEED).expect("failed to get a zenoh key experession");
+        let subscriber = session
+            .declare_subscriber(key_expr)
+            .res()
+            .expect("failed to declare a zenoh subscriber");
 
-            match sample.encoding.prefix(){
+        loop {
+            let sample = subscriber.recv().expect("all senders have been dropped");
+
+            let stream_id;
+            match sample.encoding.prefix() {
                 KnownEncoding::AppCustom => match sample.encoding.suffix() {
-                    "update_event"=>{
-                        println!("update_event");
-                        let mut data = Vec::new();
-                        for zslice in sample.value.payload.zslices() {
-                            data.extend_from_slice(zslice.as_slice());
-                        }
-                        let ae = ZenohEvent {
-                            streamid: 1,
-                            buff: data,
-                        };
-                        sender.push(ae);
-                    },
-                    "snapshot_event"=>{
-                        println!("snapshot_event");
-                        let mut data = Vec::new();
-                        for zslice in sample.value.payload.zslices() {
-                            data.extend_from_slice(zslice.as_slice());
-                        }
-                        let ae = ZenohEvent {
-                            streamid: 0,
-                            buff: data,
-                        };
-                        sender.push(ae);
-                    },
-                    "price_cli"=>{
-                        println!("cli_event");
-                        let mut data = Vec::new();
-                        for zslice in sample.value.payload.zslices() {
-                            data.extend_from_slice(zslice.as_slice());
-                        }
-                        let ae = ZenohEvent {
-                            streamid: 2,
-                            buff: data,
-                        };
-                        sender.push(ae);
-                    },
-                    unknown =>println!("unknown")
+                    "update_event" => {
+                        stream_id = 1;
+                    }
+                    "snapshot_event" => {
+                        stream_id = 0;
+                    }
+                    "price_cli" => {
+                        stream_id = 2;
+                    }
+                    _ => {
+                        log::warn!("received unregistered event");
+                        continue;
+                    }
+                },
+                _ => {
+                    log::warn!("received unknown encoding");
+                    continue;
                 }
-                unknown=> println!("unknown")
             }
+            let buff = sample
+                .value
+                .payload
+                .zslices()
+                .flat_map(|x| x.as_slice().to_owned())
+                .collect::<Vec<u8>>();
+
+            tx_z.push(ZenohEvent { stream_id, buff });
         }
     });
 
-    // // // busy poll the queue for zenoh events and process it
+    // poll the queue for zenoh events and send to aggregator to process it
     let aggregator_thread = thread::spawn(move || {
-        let mut aggregator = OrderBookAggregator::new(sender_prod);
+        let mut aggregator = Aggregator::new(tx_f);
         loop {
-            match reciever.pop() {
+            match rx_z.pop() {
                 Ok(event) => {
-                    aggregator.run(event);
+                    if let Err(e) = aggregator.process(event) {
+                        log::error!("{e}");
+                    }
+
+                    let mid_price = aggregator.get_mid_price("BTC-USDT-spot");
+                    println!("mid price: {:?}", mid_price);
+                    log::info!("Mid price: {:?}", mid_price);
                 }
-                Err(QueueError::EmptyQueue) => {}
+                Err(QueueError::EmptyQueue) => {
+                    log::trace!("no zenoh event for the aggregator");
+                }
             }
         }
     });
 
-    // produce to strategy client
-    let producer_thread = thread::spawn(move || {
-        let mut conf = Config::default();
-        let session = zenoh::open(conf).res().unwrap();
-        let datafeed = keyexpr::new("atrimo/aggregator").unwrap();
+    // produce to remote/external services
+    let extern_producing_thread = thread::spawn(move || {
+        let conf = Config::default();
+        let session = zenoh::open(conf)
+            .res()
+            .expect("failed to open zenoh session");
+        let key_expr = keyexpr::new(DATA_FEED).expect("failed to get a zenoh key experession");
+
         loop {
-            match reciever_prod.pop() {
+            match rx_f.pop() {
                 Ok(event) => {
-                    if(event.stream_id == 3) {
-                        session.put(datafeed, event.buff.clone()).encoding(Encoding::APP_CUSTOM.with_suffix("pricingDetails").unwrap()).res().unwrap();
+                    if event.stream_id == 3 {
+                        let encoding = match Encoding::APP_CUSTOM.with_suffix("pricingDetails") {
+                            Ok(enc) => enc,
+                            Err(e) => {
+                                log::error!("failed to encode pricing details\n{:?}", e);
+                                continue;
+                            }
+                        };
+                        if let Err(e) = session.put(key_expr, event.buff).encoding(encoding).res() {
+                            log::error!("failed to send encoding for pricing details\n{:?}", e);
+                        }
                     } else {
-                        session.put(datafeed, event.buff.clone()).res().unwrap();
+                        // continue;
                     }
                 }
-                Err(QueueError::EmptyQueue) => {}
+                Err(QueueError::EmptyQueue) => {
+                    log::trace!("no event to be sent to extneral service")
+                }
             }
         }
     });
 
-    consumer_thread
+    zenoh_rx_thread
         .join()
-        .expect("conusmer thread has panicked");
+        .expect("zenoh event conusmer thread has panicked");
     aggregator_thread
         .join()
         .expect("aggregator thread has panicked");
-    producer_thread
-    .join()
-    .expect("producer thread has panicked");
+    extern_producing_thread
+        .join()
+        .expect("external services producing thread has panicked");
 }

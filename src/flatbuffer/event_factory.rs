@@ -1,23 +1,30 @@
-use crate::{
-    exchanges::binance::flatbuffer::{
-        orderbook::atrimo::update_events::*, snapshot::atrimo::snapshot_events::*,
+use super::{
+    orderbook::atrimo::update_events::{
+        finish_update_event_message_buffer, UpdateAskData, UpdateBidData, UpdateData,
+        UpdateDataArgs, UpdateEvent, UpdateEventArgs, UpdateEventMessage, UpdateEventMessageArgs,
     },
+    snapshot::atrimo::snapshot_events::{
+        finish_snapshot_event_message_buffer, SnapshotAskData, SnapshotBidData, SnapshotData,
+        SnapshotDataArgs, SnapshotEvent, SnapshotEventArgs, SnapshotEventMessage,
+        SnapshotEventMessageArgs,
+    },
+};
+use crate::{
+    common::{CcyPair, Exchange, FlatbufferEvent},
     orderbook::l2::Level,
 };
-use flatbuffers;
-use std::time::{SystemTime, UNIX_EPOCH};
-use crate::common::FlatbufferEvent;
-use crate::common::CcyPair;
+use failure::ResultExt;
+use std::time::SystemTime;
 
-#[allow(dead_code)]
-pub fn make_order_book_update_event(
+pub fn make_update_event(
     bids: Vec<Level>,
     asks: Vec<Level>,
     instrument: CcyPair,
-) -> FlatbufferEvent {
+    exchange: Exchange,
+) -> Result<FlatbufferEvent, failure::Error> {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(10240000);
-    let exchange_name = builder.create_string("binance");
-    let instrument_name = builder.create_string(&instrument.to_string());
+    let exchange_name = builder.create_string(String::from(exchange).as_str());
+    let instrument_name = builder.create_string(String::from(instrument).as_str());
 
     let mut bid_offsets = Vec::new();
     let mut ask_offsets = Vec::new();
@@ -29,24 +36,29 @@ pub fn make_order_book_update_event(
     for level in asks {
         ask_offsets.push(UpdateAskData::new(level.price, level.qty));
     }
-    let asksvector = builder.create_vector(&ask_offsets);
-    let bidsvector = builder.create_vector(&bid_offsets);
+
+    let asks_vector = builder.create_vector(&ask_offsets);
+    let bids_vector = builder.create_vector(&bid_offsets);
 
     let update_data = UpdateData::create(
         &mut builder,
         &UpdateDataArgs {
-            asks: Some(asksvector),
-            bids: Some(bidsvector),
+            asks: Some(asks_vector),
+            bids: Some(bids_vector),
         },
     );
-    let duration_since_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-    let timestamp_nanos = duration_since_epoch.as_micros();
+
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .with_context(|e| format!("duration since epoch error {e}"))?
+        .as_micros();
+
     let update_event = UpdateEvent::create(
         &mut builder,
         &UpdateEventArgs {
             exchange: Some(exchange_name),
             instrument: Some(instrument_name),
-            timestamp: timestamp_nanos as u64,
+            timestamp: timestamp as u64,
             update: Some(update_data),
         },
     );
@@ -57,23 +69,25 @@ pub fn make_order_book_update_event(
             message_type: 1,
         },
     );
+
     finish_update_event_message_buffer(&mut builder, update_event_message);
     let buffer = builder.finished_data().to_vec();
-    FlatbufferEvent {
+
+    Ok(FlatbufferEvent {
         stream_id: 1,
         buff: buffer,
-    }
+    })
 }
 
-#[allow(dead_code)]
-pub fn make_order_book_snapshot_event(
+pub fn make_snapshot_event(
     bids: Vec<Level>,
     asks: Vec<Level>,
     instrument: CcyPair,
-) -> FlatbufferEvent {
+    exchange: Exchange,
+) -> Result<FlatbufferEvent, failure::Error> {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(10240000);
-    let exchange_name = builder.create_string("binance");
-    let instrument_name = builder.create_string(&instrument.to_string());
+    let exchange_name = builder.create_string(String::from(exchange).as_str());
+    let instrument_name = builder.create_string(&String::from(instrument));
 
     let mut bid_offsets = Vec::new();
     let mut ask_offsets = Vec::new();
@@ -86,28 +100,32 @@ pub fn make_order_book_snapshot_event(
         ask_offsets.push(SnapshotAskData::new(level.price, level.qty));
     }
 
-    let asksvector = builder.create_vector(&ask_offsets);
-    let bidsvector = builder.create_vector(&bid_offsets);
+    let asks_vector = builder.create_vector(&ask_offsets);
+    let bids_vector = builder.create_vector(&bid_offsets);
 
     let snapshot_data = SnapshotData::create(
         &mut builder,
         &SnapshotDataArgs {
-            asks: Some(asksvector),
-            bids: Some(bidsvector),
+            asks: Some(asks_vector),
+            bids: Some(bids_vector),
         },
     );
+
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .with_context(|e| format!("duration since epoch error {e}"))?
+        .as_micros();
+
     let snapshot_event = SnapshotEvent::create(
         &mut builder,
         &SnapshotEventArgs {
             exchange: Some(exchange_name),
             instrument: Some(instrument_name),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs(),
+            timestamp: timestamp as u64,
             snapshot: Some(snapshot_data),
         },
     );
+
     let snapshot_event_message = SnapshotEventMessage::create(
         &mut builder,
         &SnapshotEventMessageArgs {
@@ -118,18 +136,18 @@ pub fn make_order_book_snapshot_event(
 
     finish_snapshot_event_message_buffer(&mut builder, snapshot_event_message);
     let buffer = builder.finished_data().to_vec();
-    FlatbufferEvent {
+
+    Ok(FlatbufferEvent {
         stream_id: 0,
         buff: buffer,
-    }
+    })
 }
 
-#[allow(dead_code)]
-pub fn make_order_book_snapshot_event_aggregator(
+pub fn make_snapshot_aggregator(
     bids: Vec<Level>,
     asks: Vec<Level>,
     instrument: &str,
-) -> FlatbufferEvent {
+) -> Result<FlatbufferEvent, failure::Error> {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
     let exchange_name = builder.create_string("");
     let instrument_name = builder.create_string(instrument);
@@ -155,15 +173,18 @@ pub fn make_order_book_snapshot_event_aggregator(
             bids: Some(bidsvector),
         },
     );
+
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .with_context(|e| format!("duration since epoch error {e}"))?
+        .as_micros();
+
     let snapshot_event = SnapshotEvent::create(
         &mut builder,
         &SnapshotEventArgs {
             exchange: Some(exchange_name),
             instrument: Some(instrument_name),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs(),
+            timestamp: timestamp as u64,
             snapshot: Some(snapshot_data),
         },
     );
@@ -177,9 +198,9 @@ pub fn make_order_book_snapshot_event_aggregator(
 
     finish_snapshot_event_message_buffer(&mut builder, snapshot_event_message);
     let buffer = builder.finished_data().to_vec();
-    FlatbufferEvent {
+
+    Ok(FlatbufferEvent {
         stream_id: 0,
         buff: buffer,
-    }
+    })
 }
-

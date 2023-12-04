@@ -1,30 +1,15 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use async_wss::exchanges::binance::flatbuffer::event_factory::make_order_book_snapshot_event as make_binance_snapshot_event;
-use async_wss::exchanges::okx::flatbuffer::event_factory::make_order_book_snapshot_event as make_okx_snapshot_event;
-use async_wss::exchanges::okx::flatbuffer::event_factory::make_order_book_update_event as make_okx_update_event;
-use async_wss::aggregator::ZenohEvent;
-use async_wss::common::CcyPair;
-use async_wss::aggregator_v2::AggBook;
-use async_wss::aggregator::OrderBookAggregator;
+use async_wss::aggregator::Aggregator;
+use async_wss::common::{CcyPair, Exchange, FlatbufferEvent, ZenohEvent};
+use async_wss::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
 use async_wss::orderbook::l2::Level;
-use async_wss::common::FlatbufferEvent;
 use async_wss::spsc::SPSCQueue;
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
-fn criterion_benchmark(c: &mut Criterion) {
-    let (mut sender_prod, mut reciever_prod) = SPSCQueue::new::<FlatbufferEvent>(2000000);
-    
-    // aggregator v2
-    let mut agg_book = AggBook::new();
-    // aggregator
-    let mut aggregator = OrderBookAggregator::new(sender_prod);
-    
-    // ************ Setup Data ************
-
+fn setup_data(num_levels: i32) -> (Vec<Level>, Vec<Level>, CcyPair) {
+    // Setup data
     let mut asks = Vec::new();
     let mut bids = Vec::new();
-    let num_levels = 55;
-
     let mut rng = rand::thread_rng();
 
     for _ in 0..num_levels {
@@ -39,82 +24,90 @@ fn criterion_benchmark(c: &mut Criterion) {
         base: String::from("btc"),
         quote: String::from("usd"),
         product: String::from("spot"),
-    };  
+    };
+
+    (bids, asks, currency_pair)
+}
+
+fn criterion_benchmark(c: &mut Criterion) {
+    let (tx, _) = SPSCQueue::new::<FlatbufferEvent>(2000000);
+
+    // Setup aggregator
+    let mut aggregator = Aggregator::new(tx);
 
     /*
-    Scenario 1 : 
-        1. aggregator v2 and aggregator inserting snapshot to aggregator book as first exchange
+    Scenario 1 : aggregator inserting snapshot from binance with 200 levels
     */
-
-    let evnt = make_binance_snapshot_event(bids.clone(), asks.clone(), currency_pair.clone());
-    
+    let (bids, asks, currency_pair) = setup_data(200);
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
     let zenoh_event = ZenohEvent {
-        streamid: 0, // binance snapshot
-        buff: evnt.buff, // flatbuffers
-    };    
+        stream_id: 0,
+        buff: event.buff,
+    };
 
-    // benchmark for both aggregator and aggregator_v2 for their first snapshot event from any exchange
-    c.bench_function("aggregator_v2_scenario_1", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_1", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
+    c.bench_function("Scenario 1", |b| {
+        b.iter(|| aggregator.process(zenoh_event.clone()))
+    });
 
     /*
-    Scenario 2 : 
-        1. Aggregator and Aggregator_v2 with binance 42 levels each
-        2. Okx snapshot event comes in with 50 levels 
-        3. Aggregator_v2 only iterates thru 50 levels to reset the okx book
-        3. Aggregator iterates thru all 42+50 levels to reset the okx book 
+    Scenario 2:
+        1. Aggregator with binance 200 levels already
+        2. Binance snapshot event comes in with 200 levels
     */
-
-    let evnt = make_binance_snapshot_event(bids.clone(), asks.clone(), currency_pair.clone());
-
+    let (bids, asks, currency_pair) = setup_data(200);
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
     let zenoh_event = ZenohEvent {
-        streamid: 0, // binance snapshot
-        buff: evnt.buff, // flatbuffers
-    };   
+        stream_id: 0,
+        buff: event.buff,
+    };
 
-    // fills the aggregator_v2 book with binance 42 levels bids and asks each
-    agg_book.snapshot_event(&zenoh_event.buff);   
-    // fills the aggregator book with binance 42 levels bids and asks each
-    aggregator.run(zenoh_event);
-
-    asks.clear();
-    bids.clear();
-
-    for _ in 0..50 { // average levels in okx
-        let price = rng.gen_range(1..10000);
-        let qty = rng.gen_range(1..1000);
-
-        asks.push(Level { price, qty });
-        bids.push(Level { price, qty });
-    }
-
-    let evnt = make_okx_snapshot_event(bids.clone(), asks.clone(), currency_pair.clone());
-
-    let zenoh_event = ZenohEvent {
-        streamid: 0, // okx snapshot
-        buff: evnt.buff, // flatbuffers
-    };   
-
-    // run the benchmark for aggregator and aggregator v2 for new okx snapshot event
-    c.bench_function("aggregator_v2_scenario_2", |b| b.iter(|| agg_book.snapshot_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_2", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
+    c.bench_function("Scenario 2", |b| {
+        b.iter(|| aggregator.process(zenoh_event.clone()))
+    });
 
     /*
-    Scenario 3 : 
-        1. Aggregator and Aggregator_v2 for update events
-        2. Average length of update bids and asks in binance and okx is 50 
+    Scenario 3:
+        1. aggregator with binance 200 levels
+        2. OKX snapshot event comes in with 180 levels
     */
-
-    let evnt = make_okx_update_event(bids.clone(), asks.clone(), currency_pair.clone());
-
+    let (bids, asks, currency_pair) = setup_data(180);
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Okx).unwrap();
     let zenoh_event = ZenohEvent {
-        streamid: 1, // okx snapshot
-        buff: evnt.buff, // flatbuffers
-    };   
+        stream_id: 0,
+        buff: event.buff,
+    };
 
-    // Run the aggregator and aggregator v2 benchmark for update event
-    c.bench_function("aggregator_v2_scenario_3", |b| b.iter(|| agg_book.update_event(&zenoh_event.buff)));
-    c.bench_function("aggregator_scenario_3", |b| b.iter(|| aggregator.run(zenoh_event.clone())));
+    c.bench_function("Scenario 3", |b| {
+        b.iter(|| aggregator.process(zenoh_event.clone()))
+    });
+
+    /*
+    Scenario 4: update events from Okx of 50 levels
+    */
+    let (bids, asks, currency_pair) = setup_data(50);
+    let event = make_update_event(bids, asks, currency_pair, Exchange::Okx).unwrap();
+    let zenoh_event = ZenohEvent {
+        stream_id: 1,
+        buff: event.buff,
+    };
+
+    c.bench_function("Scenario 4", |b| {
+        b.iter(|| aggregator.process(zenoh_event.clone()))
+    });
+
+    /*
+    Scenario 5: update events from binance of 70 levels
+    */
+    let (bids, asks, currency_pair) = setup_data(70);
+    let event = make_update_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
+    let zenoh_event = ZenohEvent {
+        stream_id: 1,
+        buff: event.buff,
+    };
+
+    c.bench_function("Scenario 5", |b| {
+        b.iter(|| aggregator.process(zenoh_event.clone()))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

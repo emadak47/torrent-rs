@@ -5,6 +5,7 @@ use std::vec::Vec;
 use crossbeam_utils::CachePadded;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[derive(Debug, PartialEq)]
 pub enum QueueError {
     EmptyQueue,
 }

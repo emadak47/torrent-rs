@@ -1,17 +1,73 @@
-use ::phf::phf_map;
+pub static DATA_FEED: &str = "atrimo/datafeeds";
+static ASSET_CONSTANT_MULTIPLIER: f64 = 1e10;
 
-pub enum Side {
-    BUY, 
-    SELL
+pub fn scale<'a>(num: impl Into<&'a str>) -> Result<u64, std::num::ParseFloatError> {
+    let num_f64: f64 = num.into().parse()?;
+    Ok((num_f64 * ASSET_CONSTANT_MULTIPLIER) as u64)
 }
 
-pub static ASSET_CONSTANT_MULTIPLIER: phf::Map<&'static str, f64> = phf_map! {
-    "USDT" => 100000000.0,
-    "ETH" => 1000000000.0,
-    "BTC" => 100000000.0,
-};
+pub enum Exchange {
+    Binance,
+    Okx,
+}
 
+impl From<Exchange> for String {
+    fn from(value: Exchange) -> Self {
+        match value {
+            Exchange::Binance => String::from("binance"),
+            Exchange::Okx => String::from("okx"),
+        }
+    }
+}
+
+pub enum Side {
+    BUY,
+    SELL,
+}
+
+pub enum SymbolPair<'a> {
+    BinanceSpot(&'a str),
+    OkxSpot(&'a str),
+}
+
+pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
+    match pair {
+        SymbolPair::BinanceSpot(symb) => {
+            let regex =
+                regex::Regex::new(r"^(\w+)(BTC|TRY|ETH|BNB|USDT|PAX|TUSD|USDC|XRP|USDS)$").ok()?;
+            let capture = regex.captures(symb)?;
+            let (base, quote) = (capture.get(1)?, capture.get(2)?);
+
+            return Some(CcyPair {
+                base: base.as_str().to_string(),
+                quote: quote.as_str().to_string(),
+                product: "spot".to_string(),
+            });
+        }
+        SymbolPair::OkxSpot(symb) => {
+            let parts = symb.split('-').collect::<Vec<&str>>();
+
+            return if parts.len() == 2 {
+                Some(CcyPair {
+                    base: parts[0].to_string(),
+                    quote: parts[1].to_string(),
+                    product: "spot".to_string(),
+                })
+            } else {
+                None
+            };
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct FlatbufferEvent {
+    pub stream_id: u8,
+    pub buff: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ZenohEvent {
     pub stream_id: u8,
     pub buff: Vec<u8>,
 }
@@ -23,25 +79,8 @@ pub struct CcyPair {
     pub product: String,
 }
 
-// aggregator pricing details
-pub struct PricingDetails {
-    pub best_bid: f32,
-    pub best_ask: f32,
-    pub worse_bid: f32,
-    pub worse_ask: f32,
-    pub execution_bid: f32,
-    pub execution_ask: f32,
-    pub imbalance_1: f32,
-    pub imbalance_25: f32,
-    pub imbalance_50: f32,
-    pub imbalance_75: f32,
-    pub imbalance_100: f32,
-    pub depth: u64,
-}
-
-
-impl CcyPair {
-    pub fn to_string(&self) -> String {
-        format!("{}_{}_{}", self.base, self.quote, self.product)
+impl From<CcyPair> for String {
+    fn from(value: CcyPair) -> Self {
+        format!("{}-{}-{}", value.base, value.quote, value.product)
     }
 }

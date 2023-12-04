@@ -18,14 +18,14 @@ async fn main() {
         .expect("failed to get spot wss client");
     let mut ws_client = ws_client.connect(tx).await.unwrap();
 
-    let mut ob_feed = BinanceFeedManager::new(rx);
+    let mut ob_feed = BinanceFeedManager::new(rx).unwrap();
     tokio::spawn(async move {
         ob_feed.run().await.unwrap();
     });
 
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    ws_client.sub_ob_depth("SOLUSDT").await.unwrap();
+    // ws_client.sub_ob_depth("SOLUSDT").await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    ws_client.unsub_ob_depth("BTCUSDT").await.unwrap();
+    // ws_client.unsub_ob_depth("BTCUSDT").await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 }
