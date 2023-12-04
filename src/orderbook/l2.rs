@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
 /// Defines an ordebook's L2 level
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Level {
     pub price: u64,
     pub qty: u64,

@@ -1,4 +1,3 @@
-pub mod spot;
 pub mod orderbook;
+pub mod spot;
 mod types;
-mod utils;

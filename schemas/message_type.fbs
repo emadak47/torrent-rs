@@ -1,0 +1,7 @@
+namespace Atrimo.MessageTypeEnum;
+
+enum MessageType:byte {
+    SNAPSHOT_EVENT = 0,
+    UPDATE_EVENT = 1,
+    TRADE_EVENT =2
+}

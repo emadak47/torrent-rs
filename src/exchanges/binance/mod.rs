@@ -1,7 +1,5 @@
-pub mod spot;
-pub mod orderbook;
-mod types;
-mod errors;
 mod api;
-mod client;
-mod utils;
+mod errors;
+pub mod orderbook;
+pub mod spot;
+mod types;
