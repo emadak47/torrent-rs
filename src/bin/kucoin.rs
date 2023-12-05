@@ -1,4 +1,4 @@
-use async_wss::exchanges::kucoin::{spot::SpotWSClientBuilder};
+use async_wss::exchanges::kucoin::{spot::SpotWSClientBuilder, orderbook::KucoinFeedManager};
 
 #[tokio::main]
 async fn main() {
@@ -19,13 +19,13 @@ async fn main() {
     
     let mut ws_client = ws_client.connect(tx).await.expect("error connecting");
     
-    // let mut ob_feed = BybitFeedManager::new(rx);
-    // tokio::spawn(async move {
-    //     ob_feed.run().await.unwrap();
-    // });
+    let mut ob_feed = KucoinFeedManager::new(rx);
+    tokio::spawn(async move {
+        ob_feed.run().await.unwrap();
+    });
 
     // tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    ws_client.sub_ob_depth("ETH-USDT").await.unwrap();
+    //ws_client.sub_ob_depth("ETH-USDT").await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
     // ws_client.unsub_ob_depth(50, "BTC-USDT").await.unwrap();
     // tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;

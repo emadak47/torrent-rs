@@ -198,7 +198,6 @@ impl SpotWSClient {
                 Some(res) => match res {
                     Ok(msg) => match msg {
                         Message::Text(msg) => {
-                            println!("msg {}", msg);
                             let event = match serde_json::from_str(&msg)
                                 .and_then(|v: serde_json::Value| serde_json::from_value::<Event>(v))
                                 .map_err(|e| {
@@ -212,7 +211,9 @@ impl SpotWSClient {
 
                             match event {
                                 Event::OrderBookMsg(d) => {
+                                    //println!("sending");
                                     if let Err(e) = tx.send(Event::OrderBookMsg(d)) {
+                                        println!("error sending to tokio channel");
                                         log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
                                     }
                                 }

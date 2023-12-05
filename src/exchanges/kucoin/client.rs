@@ -3,8 +3,15 @@ use super::{
     errors::{BinanceContentError, ErrorKind, Result},
 };
 use error_chain::bail;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use reqwest::{Response, StatusCode};
 use serde::de::DeserializeOwned;
+
+
+// Alias for HMAC-SHA256
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Clone)]
 pub struct Client {
@@ -34,7 +41,6 @@ impl Client {
         request: Option<String>,
     ) -> Result<T> {
         let mut url: String = format!("{}{}", self.host, String::from(endpoint));
-        println!("endpoint {}", url);
         if let Some(request) = request {
             if !request.is_empty() {
                 url.push_str(format!("?{}", request).as_str());
@@ -43,6 +49,25 @@ impl Client {
 
         let client = &self.inner_client;
         let response = client.post(url.as_str()).send().await?;
+
+        self.handler(response).await
+    }
+
+    pub async fn get<T: DeserializeOwned>(
+        &self,
+        endpoint: API,
+        request: Option<String>,
+    ) -> Result<T> {
+        let mut url: String = format!("{}{}", self.host, String::from(endpoint));
+        if let Some(request) = request {
+            if !request.is_empty() {
+                url.push_str(format!("?{}", request).as_str());
+            }
+        }
+
+        let client = &self.inner_client;
+        println!("result of url {}", url);
+        let response = client.get(url.as_str()).send().await?;
 
         self.handler(response).await
     }

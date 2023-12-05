@@ -25,6 +25,15 @@ pub struct InstanceServers {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OrderBook {
+    pub sequence: String,
+    pub time: u64,
+    pub bids: Vec<Vec<String>>,
+    pub asks: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InstanceServer {
     pub ping_interval: i32,
     pub endpoint: String,
@@ -53,8 +62,8 @@ pub struct Level2Changes {
 #[serde(rename_all = "camelCase")]
 pub struct Level2 {
     pub changes: Level2Changes,
-    pub sequence_end: i64,
-    pub sequence_start: i64,
+    pub sequence_end: u64,
+    pub sequence_start: u64,
     pub symbol: String,
     pub time: u64,
 }
