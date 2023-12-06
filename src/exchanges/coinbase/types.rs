@@ -12,16 +12,16 @@ pub enum OrderSide {
 
 #[derive(Deserialize, Debug)]
 pub struct Snapshot{
-    product_id: String,
-    bids: Vec<Level2SnapshotRecord>,
-    asks: Vec<Level2SnapshotRecord>,
+    pub product_id: String,
+    pub bids: Vec<Level2SnapshotRecord>,
+    pub asks: Vec<Level2SnapshotRecord>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct L2update{
-    product_id: String,
-    changes: Vec<Level2UpdateRecord>,
-    time: DateTime,
+    pub product_id: String,
+    pub changes: Vec<Level2UpdateRecord>,
+    pub time: DateTime,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

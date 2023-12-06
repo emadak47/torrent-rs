@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde::Deserialize;
 
 use std::collections::HashMap;
+use crate::exchanges::coinbase::utils::get_time;
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
@@ -18,12 +19,13 @@ pub struct AuthParams {
     signature: String,
     key: String,
     passphrase: String,
+    timestamp: u128
 }
 
 impl AuthParams {
     pub fn new(key: String, secret: String, passphrase: String) -> Self {
         let signature = generate_signature(&secret); 
-        Self { signature, key, passphrase }
+        Self { signature, key, passphrase, timestamp: get_time()}
     }
 }
 
@@ -222,10 +224,14 @@ impl SpotWSClient {
                             };
                             match event {
                                 Event::Snapshot(d) => {
-                                    println!("snapshot recieved");
+                                    if let Err(e) = tx.send(Event::Snapshot(d)) {
+                                        log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                    }
                                 }
                                 Event::L2update(d) => {
-                                    println!("update event received");
+                                    if let Err(e) = tx.send(Event::L2update(d)) {
+                                        log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                    }
                                 }
                             }
                         }
