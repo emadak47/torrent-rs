@@ -28,8 +28,15 @@ impl Config {
 
     pub fn coinbase() -> Self {
         Self {
-            spot_rest_api_endpoint: "https://www.bybit.com/".into(),
+            spot_rest_api_endpoint: "https://www.coinbase.com/".into(),
             spot_ws_endpoint: "wss://ws-feed.pro.coinbase.com".into(),
+        }
+    }
+
+    pub fn gate() -> Self {
+        Self {
+            spot_rest_api_endpoint: "https://api.gateio.ws".into(),
+            spot_ws_endpoint: "wss://api.gateio.ws/ws/v4/".into(),
         }
     }
 }
