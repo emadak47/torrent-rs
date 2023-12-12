@@ -56,8 +56,8 @@ impl Config {
         Self {
             spot_rest_api_endpoint: "https://api.kucoin.com".into(),
             futures_rest_api_endpoint: "https://api-futures.kucoin.com".into(),
-            spot_ws_endpoint: "wss://ws-api-futures.kucoin.com/".into(),
-            futures_ws_endpoint: "wss://ws-api-spot.kucoin.com/".into(),
+            spot_ws_endpoint: "wss://ws-api-spot.kucoin.com/".into(),
+            futures_ws_endpoint: "wss://ws-api-futures.kucoin.com/".into(),
         }
     }
 }

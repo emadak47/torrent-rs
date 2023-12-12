@@ -49,7 +49,7 @@ impl Default for FuturesWSClientBuilder {
     fn default() -> Self {
         let config = Config::kucoin();
         Self {
-            url: config.spot_ws_endpoint.into(),
+            url: config.futures_ws_endpoint.into(),
             topics: Vec::new(),
         }
     }
