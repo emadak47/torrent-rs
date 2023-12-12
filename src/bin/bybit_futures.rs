@@ -1,4 +1,4 @@
-use async_wss::exchanges::bybit::{spot::SpotWSClientBuilder, orderbook::BybitFeedManager};
+use async_wss::exchanges::bybit::{futures::FuturesWSClientBuilder, orderbook::BybitFeedManager};
 
 #[tokio::main]
 async fn main() {
@@ -8,7 +8,7 @@ async fn main() {
     pretty_env_logger::init();
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
-    let mut ws_builder = SpotWSClientBuilder::default();
+    let mut ws_builder = FuturesWSClientBuilder::default();
     // ws_builder.sub_trade("ETHUSDT");
     ws_builder.sub_ob_depth(50, "BTCUSDT");
 
@@ -31,4 +31,3 @@ async fn main() {
     // tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
     
 }
-
