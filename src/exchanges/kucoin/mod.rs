@@ -6,4 +6,5 @@ pub mod errors;
 pub mod utils;
 pub mod flatbuffer;
 pub mod orderbook;
+pub mod futures;
 
