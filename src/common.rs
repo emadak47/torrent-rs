@@ -47,7 +47,7 @@ pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
         SymbolPair::OkxSpot(symb) => {
             let parts = symb.split('-').collect::<Vec<&str>>();
 
-            return if parts.len() == 2 {
+            if parts.len() == 2 {
                 Some(CcyPair {
                     base: parts[0].to_string(),
                     quote: parts[1].to_string(),
@@ -55,7 +55,7 @@ pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
                 })
             } else {
                 None
-            };
+            }
         }
     }
 }

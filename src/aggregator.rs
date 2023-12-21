@@ -36,6 +36,7 @@ impl Metadata {
     }
 }
 
+#[derive(Default)]
 pub struct Book {
     bid_book: BookSide,
     ask_book: BookSide,
@@ -113,7 +114,7 @@ impl Aggregator {
         }
 
         // remove price levels with total qty 0
-        if asks_to_remove.len() > 0 || bids_to_remove.len() > 0 {
+        if !asks_to_remove.is_empty() || !bids_to_remove.is_empty() {
             let book = self
                 .books
                 .get_mut(instrument)
@@ -309,6 +310,7 @@ impl Aggregator {
             }
             2 => {
                 // Pricing Details
+                self.make_snapshot_event("BTC-USDT-spot");
             }
             _ => return Err(failure::err_msg("unexpected stream id event")),
         }
@@ -322,20 +324,20 @@ impl Aggregator {
      ************************************************************
      */
     pub fn list_books(&self) -> Vec<&String> {
-        self.books.keys().into_iter().collect::<Vec<&String>>()
+        self.books.keys().collect::<Vec<&String>>()
     }
 
     /// Returns all bid price levels for the given `instrument` if it exists.
     pub fn list_bid_levels<'a>(&self, instrument: impl Into<&'a str>) -> Option<Vec<&u64>> {
         let book = self.books.get(instrument.into())?;
-        let bid_levels = book.bid_book.keys().into_iter().collect::<Vec<&u64>>();
+        let bid_levels = book.bid_book.keys().collect::<Vec<&u64>>();
         Some(bid_levels)
     }
 
     /// Returns all ask price levels for the given `instrument` if it exists.
     pub fn list_ask_levels<'a>(&self, instrument: impl Into<&'a str>) -> Option<Vec<&u64>> {
         let book = self.books.get(instrument.into())?;
-        let ask_levels = book.ask_book.keys().into_iter().collect::<Vec<&u64>>();
+        let ask_levels = book.ask_book.keys().collect::<Vec<&u64>>();
         Some(ask_levels)
     }
 
@@ -454,7 +456,7 @@ impl Aggregator {
         let bps: f64 = bps.into();
         let book = self.books.get(instrument)?;
         let mid_price = self.get_mid_price(instrument)?;
-        let factor = (1.0 as f64) - (bps as f64 / 10000 as f64);
+        let factor = (1.0_f64) - (bps / 10000_f64);
         let stoppage_price = (mid_price as f64 * factor) as u64;
         let cum_qty = book
             .bid_book
@@ -482,7 +484,7 @@ impl Aggregator {
         let bps: f64 = bps.into();
         let book = self.books.get(instrument)?;
         let mid_price = self.get_mid_price(instrument)?;
-        let factor = (1.0 as f64) + (bps as f64 / 10000 as f64);
+        let factor = (1.0_f64) + (bps / 10000_f64);
         let stoppage_price = (mid_price as f64 * factor) as u64;
         let cum_qty = book
             .ask_book

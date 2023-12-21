@@ -16,7 +16,7 @@ async fn main() {
         .build()
         .await
         .expect("failed to get spot wss client");
-    let mut ws_client = ws_client.connect(tx).await.expect("error connecting");
+    let _ws_client = ws_client.connect(tx).await.expect("error connecting");
 
     let mut ob_feed = OkxFeedManager::new(rx).unwrap();
     tokio::spawn(async move {

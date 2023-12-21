@@ -27,13 +27,9 @@ pub mod atrimo {
 
         // struct SnapshotAskData, aligned to 8
         #[repr(transparent)]
-        #[derive(Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Default)]
         pub struct SnapshotAskData(pub [u8; 16]);
-        impl Default for SnapshotAskData {
-            fn default() -> Self {
-                Self([0; 16])
-            }
-        }
+
         impl core::fmt::Debug for SnapshotAskData {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                 f.debug_struct("SnapshotAskData")
@@ -58,7 +54,7 @@ pub mod atrimo {
                 flatbuffers::follow_cast_ref::<SnapshotAskData>(buf, loc)
             }
         }
-        impl<'b> flatbuffers::Push for SnapshotAskData {
+        impl flatbuffers::Push for SnapshotAskData {
             type Output = SnapshotAskData;
             #[inline]
             unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
@@ -70,7 +66,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> flatbuffers::Verifiable for SnapshotAskData {
+        impl flatbuffers::Verifiable for SnapshotAskData {
             #[inline]
             fn run_verifier(
                 v: &mut flatbuffers::Verifier,
@@ -81,7 +77,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> SnapshotAskData {
+        impl SnapshotAskData {
             #[allow(clippy::too_many_arguments)]
             pub fn new(price: u64, qty: u64) -> Self {
                 let mut s = Self([0; 16]);
@@ -151,13 +147,9 @@ pub mod atrimo {
 
         // struct SnapshotBidData, aligned to 8
         #[repr(transparent)]
-        #[derive(Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Default)]
         pub struct SnapshotBidData(pub [u8; 16]);
-        impl Default for SnapshotBidData {
-            fn default() -> Self {
-                Self([0; 16])
-            }
-        }
+
         impl core::fmt::Debug for SnapshotBidData {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                 f.debug_struct("SnapshotBidData")
@@ -182,7 +174,7 @@ pub mod atrimo {
                 flatbuffers::follow_cast_ref::<SnapshotBidData>(buf, loc)
             }
         }
-        impl<'b> flatbuffers::Push for SnapshotBidData {
+        impl flatbuffers::Push for SnapshotBidData {
             type Output = SnapshotBidData;
             #[inline]
             unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
@@ -194,7 +186,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> flatbuffers::Verifiable for SnapshotBidData {
+        impl flatbuffers::Verifiable for SnapshotBidData {
             #[inline]
             fn run_verifier(
                 v: &mut flatbuffers::Verifier,
@@ -205,7 +197,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> SnapshotBidData {
+        impl SnapshotBidData {
             #[allow(clippy::too_many_arguments)]
             pub fn new(price: u64, qty: u64) -> Self {
                 let mut s = Self([0; 16]);
@@ -814,16 +806,16 @@ pub mod atrimo {
             flatbuffers::size_prefixed_root_unchecked::<SnapshotEventMessage>(buf)
         }
         #[inline]
-        pub fn finish_snapshot_event_message_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_snapshot_event_message_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<SnapshotEventMessage<'a>>,
         ) {
             fbb.finish(root, None);
         }
 
         #[inline]
-        pub fn finish_size_prefixed_snapshot_event_message_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_size_prefixed_snapshot_event_message_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<SnapshotEventMessage<'a>>,
         ) {
             fbb.finish_size_prefixed(root, None);

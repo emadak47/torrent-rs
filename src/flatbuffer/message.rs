@@ -109,7 +109,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> flatbuffers::Verifiable for MessageType {
+        impl flatbuffers::Verifiable for MessageType {
             #[inline]
             fn run_verifier(
                 v: &mut flatbuffers::Verifier,

@@ -27,13 +27,9 @@ pub mod atrimo {
 
         // struct UpdateAskData, aligned to 8
         #[repr(transparent)]
-        #[derive(Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Default)]
         pub struct UpdateAskData(pub [u8; 16]);
-        impl Default for UpdateAskData {
-            fn default() -> Self {
-                Self([0; 16])
-            }
-        }
+
         impl core::fmt::Debug for UpdateAskData {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                 f.debug_struct("UpdateAskData")
@@ -58,7 +54,7 @@ pub mod atrimo {
                 flatbuffers::follow_cast_ref::<UpdateAskData>(buf, loc)
             }
         }
-        impl<'b> flatbuffers::Push for UpdateAskData {
+        impl flatbuffers::Push for UpdateAskData {
             type Output = UpdateAskData;
             #[inline]
             unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
@@ -70,7 +66,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> flatbuffers::Verifiable for UpdateAskData {
+        impl flatbuffers::Verifiable for UpdateAskData {
             #[inline]
             fn run_verifier(
                 v: &mut flatbuffers::Verifier,
@@ -81,7 +77,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> UpdateAskData {
+        impl UpdateAskData {
             #[allow(clippy::too_many_arguments)]
             pub fn new(price: u64, qty: u64) -> Self {
                 let mut s = Self([0; 16]);
@@ -151,13 +147,9 @@ pub mod atrimo {
 
         // struct UpdateBidData, aligned to 8
         #[repr(transparent)]
-        #[derive(Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Default)]
         pub struct UpdateBidData(pub [u8; 16]);
-        impl Default for UpdateBidData {
-            fn default() -> Self {
-                Self([0; 16])
-            }
-        }
+
         impl core::fmt::Debug for UpdateBidData {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                 f.debug_struct("UpdateBidData")
@@ -182,7 +174,7 @@ pub mod atrimo {
                 flatbuffers::follow_cast_ref::<UpdateBidData>(buf, loc)
             }
         }
-        impl<'b> flatbuffers::Push for UpdateBidData {
+        impl flatbuffers::Push for UpdateBidData {
             type Output = UpdateBidData;
             #[inline]
             unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
@@ -194,7 +186,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> flatbuffers::Verifiable for UpdateBidData {
+        impl flatbuffers::Verifiable for UpdateBidData {
             #[inline]
             fn run_verifier(
                 v: &mut flatbuffers::Verifier,
@@ -205,7 +197,7 @@ pub mod atrimo {
             }
         }
 
-        impl<'a> UpdateBidData {
+        impl UpdateBidData {
             #[allow(clippy::too_many_arguments)]
             pub fn new(price: u64, qty: u64) -> Self {
                 let mut s = Self([0; 16]);
@@ -811,16 +803,16 @@ pub mod atrimo {
             flatbuffers::size_prefixed_root_unchecked::<UpdateEventMessage>(buf)
         }
         #[inline]
-        pub fn finish_update_event_message_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_update_event_message_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<UpdateEventMessage<'a>>,
         ) {
             fbb.finish(root, None);
         }
 
         #[inline]
-        pub fn finish_size_prefixed_update_event_message_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_size_prefixed_update_event_message_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<UpdateEventMessage<'a>>,
         ) {
             fbb.finish_size_prefixed(root, None);

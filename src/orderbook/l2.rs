@@ -28,7 +28,7 @@ impl DerefMut for Level {
 }
 
 /// Standard L2 orderbook. Book sides are implemented using [`BTreeMap`]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OrderbookL2 {
     pub bids: BTreeMap<u64, Level>,
     pub asks: BTreeMap<u64, Level>,

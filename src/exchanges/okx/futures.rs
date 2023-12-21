@@ -37,7 +37,7 @@ impl Default for FuturesWSClientBuilder {
     fn default() -> Self {
         let config = Config::okx();
         Self {
-            url: config.spot_ws_endpoint.into(),
+            url: config.spot_ws_endpoint,
             topics: Vec::new(),
         }
     }
@@ -47,16 +47,16 @@ impl FuturesWSClientBuilder {
     pub fn sub_trade(&mut self, symb: impl Into<String>) {
         let channel = ("channel".to_string(), "trades".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, instType, inst_id]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.topics.push(param);
     }
 
     pub fn sub_ob_depth(&mut self, symb: impl Into<String>) {
         let channel = ("channel".to_string(), "books".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, instType, inst_id]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.topics.push(param);
     }
 
@@ -69,14 +69,14 @@ impl FuturesWSClientBuilder {
     }
 }
 
+type SharedWSS = Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>;
 pub struct FuturesWSClient {
     url: String,
     topics: Vec<HashMap<String, String>>,
-    write: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
+    write: Option<SharedWSS>,
 }
 
 impl FuturesWSClient {
-    #[must_use]
     pub async fn connect(
         self,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
@@ -109,32 +109,32 @@ impl FuturesWSClient {
     pub async fn sub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
         let channel = ("channel".to_string(), "trades".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, inst_id, instType]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_id, inst_type]);
         self.subscribe(param).await
     }
 
     pub async fn sub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
         let channel = ("channel".to_string(), "books".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, instType, inst_id]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.subscribe(param).await
     }
 
     pub async fn unsub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
         let channel = ("channel".to_string(), "trades".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, inst_id, instType]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_id, inst_type]);
         self.unsubscribe(param).await
     }
 
     pub async fn unsub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
         let channel = ("channel".to_string(), "books".to_string());
         let inst_id = ("instId".to_string(), symb.into());
-        let instType = ("instType".to_string(), "FUTURES".to_string());
-        let param = HashMap::from([channel, instType, inst_id]);
+        let inst_type = ("inst_type".to_string(), "FUTURES".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.unsubscribe(param).await
     }
 
@@ -147,7 +147,7 @@ impl FuturesWSClient {
             return Ok(());
         }
 
-        let ref topic = vec![param.clone()];
+        let topic = &vec![param.clone()];
         let sub = Sub::new(Methods::Subscribe, Some(topic));
         let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
@@ -168,7 +168,7 @@ impl FuturesWSClient {
             return Ok(());
         }
 
-        let ref topic = vec![param.clone()];
+        let topic = &vec![param.clone()];
         let unsub = Sub::new(Methods::Unsubscribe, Some(topic));
         let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 

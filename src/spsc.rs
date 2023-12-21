@@ -114,7 +114,7 @@ impl<T> Producer<T> {
         self.inner.tail.store(tail, Ordering::Release);
         self.tail = tail;
 
-        return true;
+        true
     }
 
     // spinlock : spin until new space is available

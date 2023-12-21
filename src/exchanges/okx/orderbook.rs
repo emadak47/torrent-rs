@@ -96,11 +96,8 @@ impl OkxFeedManager {
             }
         }
 
-        let zenoh_datafeed = keyexpr::new(DATA_FEED).or_else(|e| {
-            Err(failure::err_msg(format!(
-                "failed to get zenoh key expression\n{:?}",
-                e
-            )))
+        let zenoh_datafeed = keyexpr::new(DATA_FEED).map_err(|e| {
+            failure::err_msg(format!("failed to get zenoh key expression\n{:?}", e))
         })?;
         let pair = get_symbol_pair(SymbolPair::OkxSpot(symbol))
             .ok_or_else(|| failure::err_msg(format!("no supported pair for {:?}", symbol)))?;
