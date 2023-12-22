@@ -182,10 +182,13 @@ impl Aggregator {
     ) -> Result<(), failure::Error> {
         log::info!("Update event: Exchange `{exchange}` | Symbol `{instrument}`");
 
+        let mut bids_to_remove = Vec::new();
+        let mut asks_to_remove = Vec::new();
+
         let book = self
             .books
             .get_mut(instrument)
-            .ok_or_else(|| failure::err_msg("book must haved existed or just been insertd"))?;
+            .ok_or_else(|| failure::err_msg("book must haved existed or just been inserted"))?;
 
         for bid in bids {
             let price = bid.price();
@@ -196,11 +199,14 @@ impl Aggregator {
                 }
                 if qty == 0 {
                     metadata.ex_qty_mp.remove(exchange);
+                    if metadata.total_qty == 0 {
+                        bids_to_remove.push(price);
+                    }
                 } else {
                     metadata.total_qty += qty;
                     metadata.ex_qty_mp.insert(exchange.to_string(), qty);
                 }
-            } else {
+            } else if qty != 0 {
                 let mut metadata = Metadata::new();
                 metadata.total_qty = qty;
                 metadata.ex_qty_mp.insert(exchange.to_string(), qty);
@@ -217,15 +223,28 @@ impl Aggregator {
                 }
                 if qty == 0 {
                     metadata.ex_qty_mp.remove(exchange);
+                    if metadata.total_qty == 0 {
+                        asks_to_remove.push(price);
+                    }
                 } else {
                     metadata.total_qty += qty;
                     metadata.ex_qty_mp.insert(exchange.to_string(), qty);
                 }
-            } else {
+            } else if qty != 0 {
                 let mut metadata = Metadata::new();
                 metadata.total_qty = qty;
                 metadata.ex_qty_mp.insert(exchange.to_string(), qty);
                 book.ask_book.insert(price, metadata);
+            }
+        }
+
+        // remove price levels with total qty 0
+        if !asks_to_remove.is_empty() || !bids_to_remove.is_empty() {
+            for b in bids_to_remove {
+                book.bid_book.remove(&b);
+            }
+            for a in asks_to_remove {
+                book.ask_book.remove(&a);
             }
         }
 
@@ -330,7 +349,7 @@ impl Aggregator {
     /// Returns all bid price levels for the given `instrument` if it exists.
     pub fn list_bid_levels<'a>(&self, instrument: impl Into<&'a str>) -> Option<Vec<&u64>> {
         let book = self.books.get(instrument.into())?;
-        let bid_levels = book.bid_book.keys().collect::<Vec<&u64>>();
+        let bid_levels = book.bid_book.keys().rev().collect::<Vec<&u64>>();
         Some(bid_levels)
     }
 
@@ -405,7 +424,7 @@ impl Aggregator {
     /// Returns the average execution ask price for the given `qty`
     /// # Note
     /// this methods incurs a small performance cost. This is because the prices and
-    /// sizes in the bid orderbook have to be scaled down to avoid overflowing.
+    /// sizes in the ask orderbook have to be scaled down to avoid overflowing.
     pub fn get_execution_ask<'a>(
         &self,
         instrument: impl Into<&'a str>,
@@ -494,6 +513,36 @@ impl Aggregator {
             .sum();
 
         Some(cum_qty)
+    }
+
+    /// Returns the total bid liquidity in the orderbook of the given `instrument`
+    /// for the given `price` level
+    pub fn get_bid_liquidity<'a>(
+        &self,
+        instrument: impl Into<&'a str>,
+        price: impl Into<f64>,
+    ) -> Option<u64> {
+        let instrument = instrument.into();
+        let price = price.into();
+        let multiplier = 1e10;
+        let book = self.books.get(instrument)?;
+        let meta = book.bid_book.get(&((price * multiplier) as u64))?;
+        Some(meta.total_qty)
+    }
+
+    /// Returns the total ask liquidity in the orderbook of the given `instrument`
+    /// for the given `price` level
+    pub fn get_ask_liquidity<'a>(
+        &self,
+        instrument: impl Into<&'a str>,
+        price: impl Into<f64>,
+    ) -> Option<u64> {
+        let instrument = instrument.into();
+        let price = price.into();
+        let multiplier = 1e10;
+        let book = self.books.get(instrument)?;
+        let meta = book.ask_book.get(&((price * multiplier) as u64))?;
+        Some(meta.total_qty)
     }
 
     /*
