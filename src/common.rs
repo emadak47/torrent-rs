@@ -28,6 +28,7 @@ pub enum Side {
 pub enum SymbolPair<'a> {
     BinanceSpot(&'a str),
     OkxSpot(&'a str),
+    OkxFutures(&'a str),
 }
 
 pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
@@ -52,6 +53,19 @@ pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
                     base: parts[0].to_string(),
                     quote: parts[1].to_string(),
                     product: "spot".to_string(),
+                })
+            } else {
+                None
+            }
+        }
+        SymbolPair::OkxFutures(symb) => {
+            let parts = symb.split('-').collect::<Vec<&str>>();
+
+            if parts.len() == 3 {
+                Some(CcyPair {
+                    base: parts[0].to_string(),
+                    quote: parts[1].to_string(),
+                    product: "futures".to_string(),
                 })
             } else {
                 None

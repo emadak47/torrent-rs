@@ -10,7 +10,7 @@ async fn main() {
 
     let mut ws_builder = FuturesWSClientBuilder::default();
     // ws_builder.sub_trade("ETHUSDT");
-    ws_builder.sub_ob_depth("BTC-USDT");
+    ws_builder.sub_ob_depth("BTC-USDT-SWAP");
 
     let ws_client = ws_builder
         .build()
