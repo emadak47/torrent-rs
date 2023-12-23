@@ -71,8 +71,9 @@ fn test_levels() {
     let instrument = "btc-usdt-spot";
     let bid_levels = aggregator.list_bid_levels(instrument);
     assert!(bid_levels.is_some_and(|x| x
-        == vec![2, 4, 6]
+        == [2, 4, 6]
             .iter()
+            .rev()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
             .iter()
@@ -80,7 +81,7 @@ fn test_levels() {
 
     let ask_levels = aggregator.list_ask_levels(instrument);
     assert!(ask_levels.is_some_and(|x| x
-        == vec![1, 3, 5]
+        == [1, 3, 5]
             .iter()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
@@ -115,6 +116,7 @@ fn test_reset_event() {
     assert!(bid_levels.is_some_and(|x| x
         == vec![2, 8, 10, 12]
             .into_iter()
+            .rev()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
             .iter()
@@ -170,8 +172,9 @@ fn test_update_event() {
 
     let bid_levels = aggregator.list_bid_levels(instrument);
     assert!(bid_levels.is_some_and(|x| x
-        == vec![2, 4, 6, 8, 10]
+        == vec![2, 4, 8, 10]
             .into_iter()
+            .rev()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
             .iter()
@@ -179,7 +182,7 @@ fn test_update_event() {
 
     let ask_levels = aggregator.list_ask_levels(instrument);
     assert!(ask_levels.is_some_and(|x| x
-        == vec![1, 3, 5, 7, 9]
+        == vec![1, 3, 7, 9]
             .into_iter()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
@@ -194,11 +197,11 @@ fn test_update_event() {
     assert!(mid_price.is_some_and(|x| x == (5.5 * ASSET_CONSTANT_MULTIPLIER) as u64));
 
     let exec_bid = aggregator.get_execution_bid(instrument, 2000);
-    assert!(exec_bid.is_some_and(|x| x == (8.8 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(exec_bid.is_some_and(|x| x == (8.6 * ASSET_CONSTANT_MULTIPLIER) as u64));
     assert!(aggregator.get_execution_bid(instrument, 3001).is_none());
 
     let exec_ask = aggregator.get_execution_ask(instrument, 1000);
-    assert!(exec_ask.is_some_and(|x| x == (4.2 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(exec_ask.is_some_and(|x| x == (5.2 * ASSET_CONSTANT_MULTIPLIER) as u64));
     assert!(aggregator.get_execution_ask(instrument, 2501).is_none());
 }
 
@@ -229,6 +232,7 @@ fn test_mixed_snapshots() {
     assert!(bid_levels.is_some_and(|x| x
         == vec![2, 4, 6, 8, 10, 12]
             .into_iter()
+            .rev()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
             .iter()
@@ -302,8 +306,9 @@ fn test_mixed_updates() {
 
     let bid_levels = aggregator.list_bid_levels(instrument);
     assert!(bid_levels.is_some_and(|x| x
-        == vec![2, 4, 6, 8, 10, 12]
+        == vec![2, 4, 8, 10, 12]
             .into_iter()
+            .rev()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
             .iter()
@@ -311,7 +316,7 @@ fn test_mixed_updates() {
 
     let ask_levels = aggregator.list_ask_levels(instrument);
     assert!(ask_levels.is_some_and(|x| x
-        == vec![1, 3, 5, 7, 9, 11]
+        == vec![1, 3, 7, 9, 11]
             .into_iter()
             .map(|i| scale(&*i.to_string()).unwrap())
             .collect::<Vec<u64>>()
@@ -325,15 +330,27 @@ fn test_mixed_updates() {
     let mid_price = aggregator.get_mid_price(instrument);
     assert!(mid_price.is_some_and(|x| x == (6.5 * ASSET_CONSTANT_MULTIPLIER) as u64));
 
-    let exec_bid = aggregator.get_execution_bid(instrument, 5000);
-    assert!(exec_bid.is_some_and(|x| x == (8.352 * ASSET_CONSTANT_MULTIPLIER) as u64));
-    assert!(aggregator.get_execution_bid(instrument, 6120).is_some());
-    assert!(aggregator.get_execution_bid(instrument, 6121).is_none());
+    let exec_bid = aggregator.get_execution_bid(instrument, 3200);
+    assert!(exec_bid.is_some_and(|x| x == (9.4 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(aggregator.get_execution_bid(instrument, 4920).is_some());
+    assert!(aggregator.get_execution_bid(instrument, 4921).is_none());
 
-    let exec_ask = aggregator.get_execution_ask(instrument, 3200);
-    assert!(exec_ask.is_some_and(|x| x == (5.25 * ASSET_CONSTANT_MULTIPLIER) as u64));
-    assert!(aggregator.get_execution_ask(instrument, 5110).is_some());
-    assert!(aggregator.get_execution_ask(instrument, 5111).is_none());
+    let exec_ask = aggregator.get_execution_ask(instrument, 2000);
+    assert!(exec_ask.is_some_and(|x| x == (5.2 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(aggregator.get_execution_ask(instrument, 4110).is_some());
+    assert!(aggregator.get_execution_ask(instrument, 4111).is_none());
+
+    let bid_liq = aggregator.get_bid_liquidity(instrument, 12);
+    assert!(bid_liq.is_some_and(|x| x == (120.0 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    let bid_liq = aggregator.get_bid_liquidity(instrument, 2);
+    assert!(bid_liq.is_some_and(|x| x == (400.0 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(aggregator.get_bid_liquidity(instrument, 6).is_none());
+
+    let ask_liq = aggregator.get_ask_liquidity(instrument, 11);
+    assert!(ask_liq.is_some_and(|x| x == (110.0 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    let ask_liq = aggregator.get_ask_liquidity(instrument, 7);
+    assert!(ask_liq.is_some_and(|x| x == (1400.0 * ASSET_CONSTANT_MULTIPLIER) as u64));
+    assert!(aggregator.get_bid_liquidity(instrument, 5).is_none());
 }
 
 #[test]

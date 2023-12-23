@@ -249,7 +249,7 @@ pub mod atrimo {
             pub imbalance_100: f32,
             pub depth: u64,
         }
-        impl<'a> Default for PricingEventArgs {
+        impl Default for PricingEventArgs {
             #[inline]
             fn default() -> Self {
                 PricingEventArgs {
@@ -433,16 +433,16 @@ pub mod atrimo {
             flatbuffers::size_prefixed_root_unchecked::<PricingEvent>(buf)
         }
         #[inline]
-        pub fn finish_pricing_event_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_pricing_event_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<PricingEvent<'a>>,
         ) {
             fbb.finish(root, None);
         }
 
         #[inline]
-        pub fn finish_size_prefixed_pricing_event_buffer<'a, 'b>(
-            fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+        pub fn finish_size_prefixed_pricing_event_buffer<'a>(
+            fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
             root: flatbuffers::WIPOffset<PricingEvent<'a>>,
         ) {
             fbb.finish_size_prefixed(root, None);

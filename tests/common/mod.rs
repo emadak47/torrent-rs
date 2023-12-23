@@ -77,9 +77,13 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
                 .into_iter()
                 .map(|x| {
                     let num = scale(&*x.to_string()).unwrap();
-                    Level {
-                        price: num,
-                        qty: num * 100,
+                    if x != 5 {
+                        Level {
+                            price: num,
+                            qty: num * 100,
+                        }
+                    } else {
+                        Level { price: num, qty: 0 }
                     }
                 })
                 .collect::<Vec<Level>>();
@@ -87,9 +91,13 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
                 .into_iter()
                 .map(|x| {
                     let num = scale(&*x.to_string()).unwrap();
-                    Level {
-                        price: num,
-                        qty: num * 100,
+                    if x != 6 {
+                        Level {
+                            price: num,
+                            qty: num * 100,
+                        }
+                    } else {
+                        Level { price: num, qty: 0 }
                     }
                 })
                 .collect::<Vec<Level>>();
@@ -112,19 +120,16 @@ pub fn setup_flatbuffer(idx: Index, src: Source) -> FlatbufferEvent {
         product: String::from("spot"),
     };
 
-    let event = match src {
+    match src {
         Source::Binance(t) => match t {
-            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Binance),
-            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Binance),
+            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Binance).unwrap(),
+            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Binance).unwrap(),
         },
         Source::Okx(t) => match t {
-            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Okx),
-            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Okx),
+            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Okx).unwrap(),
+            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Okx).unwrap(),
         },
     }
-    .unwrap();
-
-    event
 }
 
 pub fn setup(idx: Index, src: Source) -> (FlatbufferEvent, Aggregator) {

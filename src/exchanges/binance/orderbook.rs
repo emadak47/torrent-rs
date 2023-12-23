@@ -19,10 +19,10 @@ fn validate_next_update(first_update_id: &u64, last_update_id: u64) -> bool {
     let expected_next_id = last_update_id + 1;
     if *first_update_id == expected_next_id {
         // do not skip the update
-        return false;
+        false
     } else {
         // request snapshot
-        return true;
+        true
     }
 }
 
@@ -34,10 +34,10 @@ fn validate_first_update(
     let expected_next_id = last_update_id + 1;
     if *first_update_id <= expected_next_id && *final_update_id >= expected_next_id {
         // not skip the update
-        return false;
+        false
     } else {
         // request snapshot
-        return true;
+        true
     }
 }
 
@@ -159,11 +159,8 @@ impl BinanceFeedManager {
             bids_flat.push(Level::new(bid_price_u64, bid_qty_u64));
         }
 
-        let zenoh_datafeed = keyexpr::new(DATA_FEED).or_else(|e| {
-            Err(failure::err_msg(format!(
-                "failed to get zenoh key expression\n{:?}",
-                e
-            )))
+        let zenoh_datafeed = keyexpr::new(DATA_FEED).map_err(|e| {
+            failure::err_msg(format!("failed to get zenoh key expression\n{:?}", e))
         })?;
         let pair = get_symbol_pair(SymbolPair::BinanceSpot(symbol))
             .ok_or_else(|| failure::err_msg(format!("no supported pair for {:?}", symbol)))?;
@@ -212,7 +209,7 @@ impl BinanceFeedManager {
                 &update.final_update_id,
                 entry.data.last_update_id,
             ) {
-                self.reset(&symbol, None).await?;
+                self.reset(symbol, None).await?;
             } else {
                 let book = OrderBook {
                     bids: update.bids.unwrap_or_default(),
@@ -221,18 +218,17 @@ impl BinanceFeedManager {
                 };
                 self.refresh(symbol, book, false)?;
             }
+        } else if validate_next_update(&update.first_update_id, entry.data.last_update_id) {
+            self.reset(symbol, None).await?;
         } else {
-            if validate_next_update(&update.first_update_id, entry.data.last_update_id) {
-                self.reset(&symbol, None).await?;
-            } else {
-                let book = OrderBook {
-                    bids: update.bids.unwrap_or_default(),
-                    asks: update.asks.unwrap_or_default(),
-                    last_update_id: update.final_update_id,
-                };
-                self.refresh(symbol, book, false)?;
-            }
+            let book = OrderBook {
+                bids: update.bids.unwrap_or_default(),
+                asks: update.asks.unwrap_or_default(),
+                last_update_id: update.final_update_id,
+            };
+            self.refresh(symbol, book, false)?;
         }
+
         Ok(())
     }
 
@@ -266,10 +262,8 @@ impl BinanceFeedManager {
                             // TODO: complete re-request snapshot
                             // return Err(Error::from(e).context("Failed to get a binance orderbook snapshot"))?;
                         }
-                    } else {
-                        if start.elapsed() > std::time::Duration::from_secs(30) {
-                            log::warn!("Still can't get binance orderbook snapshot");
-                        }
+                    } else if start.elapsed() > std::time::Duration::from_secs(30) {
+                        log::warn!("Still can't get binance orderbook snapshot");
                     }
                 }
             }

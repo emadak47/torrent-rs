@@ -5,40 +5,37 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use log;
 use serde::Serialize;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 
 #[derive(Debug, Serialize)]
-struct Sub<'a, 'b> {
-    method: Methods,
-    params: Option<&'a Vec<String>>,
-    id: &'b usize,
+struct Sub<'a> {
+    op: Methods,
+    args: Option<&'a Vec<HashMap<String, String>>>,
 }
 
-impl<'a, 'b> Sub<'a, 'b> {
-    pub(crate) fn new(method: Methods, params: Option<&'a Vec<String>>, id: &'b usize) -> Self {
-        Self { method, params, id }
+impl<'a> Sub<'a> {
+    pub(crate) fn new(op: Methods, args: Option<&'a Vec<HashMap<String, String>>>) -> Self {
+        Self { op, args }
     }
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "lowercase")]
 pub enum Methods {
     Subscribe,
     Unsubscribe,
 }
 
-pub struct SpotWSClientBuilder {
+pub struct FuturesWSClientBuilder {
     url: String,
-    topics: Vec<String>,
+    topics: Vec<HashMap<String, String>>,
 }
-
-impl Default for SpotWSClientBuilder {
+impl Default for FuturesWSClientBuilder {
     fn default() -> Self {
-        let config = Config::binance();
+        let config = Config::okx();
         Self {
             url: config.spot_ws_endpoint,
             topics: Vec::new(),
@@ -46,99 +43,112 @@ impl Default for SpotWSClientBuilder {
     }
 }
 
-impl SpotWSClientBuilder {
+impl FuturesWSClientBuilder {
     pub fn sub_trade(&mut self, symb: impl Into<String>) {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "trades".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.topics.push(param);
     }
 
     pub fn sub_ob_depth(&mut self, symb: impl Into<String>) {
-        let param = format!("{}@depth", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "books".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.topics.push(param);
     }
 
-    pub async fn build(self) -> Result<SpotWSClient, Error> {
-        Ok(SpotWSClient {
+    pub async fn build(self) -> Result<FuturesWSClient, Error> {
+        Ok(FuturesWSClient {
             url: self.url,
             topics: self.topics,
-            id: 0,
             write: None,
         })
     }
 }
 
 type SharedWSS = Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>;
-pub struct SpotWSClient {
+pub struct FuturesWSClient {
     url: String,
-    topics: Vec<String>,
-    id: usize,
+    topics: Vec<HashMap<String, String>>,
     write: Option<SharedWSS>,
 }
 
-impl SpotWSClient {
+impl FuturesWSClient {
     pub async fn connect(
         self,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
     ) -> Result<Self, Error> {
         let (stream, _) = tokio_tungstenite::connect_async(&self.url)
             .await
-            .context("failed to connect to binance wss")?;
+            .context("failed to connect to okx wss")?;
 
         let (mut write, read) = stream.split();
 
         if !self.topics.is_empty() {
-            let sub = Sub::new(Methods::Subscribe, Some(&self.topics), &0);
+            let sub = Sub::new(Methods::Subscribe, Some(&self.topics));
             let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
-
             write
-                .send(Message::Text(sub_req))
+                .send(Message::Text(sub_req.to_string()))
                 .await
                 .context("failed to send init sub request to stream")?;
         }
         let write = Arc::new(Mutex::new(write));
 
-        tokio::spawn(SpotWSClient::run(Arc::clone(&write), read, tx));
+        tokio::spawn(FuturesWSClient::run(Arc::clone(&write), read, tx));
 
         Ok(Self {
             url: self.url,
             topics: self.topics,
-            id: self.id + 1,
             write: Some(write),
         })
     }
 
     pub async fn sub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "trades".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_id, inst_type]);
         self.subscribe(param).await
     }
 
     pub async fn sub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@depth", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "books".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.subscribe(param).await
     }
 
     pub async fn unsub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "trades".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_id, inst_type]);
         self.unsubscribe(param).await
     }
 
     pub async fn unsub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@depth", symb.into()).to_lowercase();
+        let channel = ("channel".to_string(), "books".to_string());
+        let inst_id = ("instId".to_string(), symb.into());
+        let inst_type = ("instType".to_string(), "SWAP".to_string());
+        let param = HashMap::from([channel, inst_type, inst_id]);
         self.unsubscribe(param).await
     }
 
-    pub async fn list_subs(&self) -> &Vec<String> {
+    pub async fn list_subs(&self) -> &Vec<HashMap<String, String>> {
         &self.topics
     }
 
-    async fn subscribe(&mut self, param: impl Into<String>) -> Result<(), Error> {
-        let param = param.into();
+    async fn subscribe(&mut self, param: HashMap<String, String>) -> Result<(), Error> {
         if self.topics.contains(&param) {
             return Ok(());
         }
 
         let topic = &vec![param.clone()];
-        let sub = Sub::new(Methods::Subscribe, Some(topic), &self.id);
+        let sub = Sub::new(Methods::Subscribe, Some(topic));
         let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
@@ -149,19 +159,17 @@ impl SpotWSClient {
             .context("failed to send sub request to stream")?;
 
         self.topics.push(param);
-        self.id += 1;
 
         Ok(())
     }
 
-    async fn unsubscribe(&mut self, param: impl Into<String>) -> Result<(), Error> {
-        let param = param.into();
+    async fn unsubscribe(&mut self, param: HashMap<String, String>) -> Result<(), Error> {
         if !self.topics.contains(&param) {
             return Ok(());
         }
 
         let topic = &vec![param.clone()];
-        let unsub = Sub::new(Methods::Unsubscribe, Some(topic), &self.id);
+        let unsub = Sub::new(Methods::Unsubscribe, Some(topic));
         let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
@@ -172,12 +180,11 @@ impl SpotWSClient {
             .context("failed to send sub request to stream")?;
 
         self.topics.retain(|val| *val != param);
-        self.id += 1;
 
         Ok(())
     }
 
-    async fn run(
+    pub async fn run(
         write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
         mut read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
@@ -187,34 +194,44 @@ impl SpotWSClient {
                 Some(res) => match res {
                     Ok(msg) => match msg {
                         Message::Text(msg) => {
-                            let value: serde_json::Value = match serde_json::from_str(&msg) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    log::error!("Failed to serialise binance msg\n{:?}", e);
-                                    continue;
-                                }
-                            };
-
-                            if value.get("result").is_some() && value.get("id").is_some() {
-                                continue;
-                            }
-
-                            let event = match serde_json::from_str(value.to_string().as_str()) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    log::error!("Failed to serialise binance event\n{:?}", e);
-                                    continue;
-                                }
+                            let event = match serde_json::from_str(&msg)
+                                .and_then(|v: serde_json::Value| serde_json::from_value::<Event>(v))
+                                .map_err(|e| {
+                                    log::error!("Failed to serialise okx event. \n {:#?}", e)
+                                })
+                                .ok()
+                            {
+                                None => continue,
+                                Some(ev) => ev,
                             };
 
                             match event {
+                                Event::InitResponse(i) => {
+                                    if i.event == "error" {
+                                        let code = i.code.unwrap_or("unknown".to_string());
+                                        let msg = i.msg.unwrap_or("unknown".to_string());
+
+                                        log::warn!("subscription failed w/ msg: {}", msg);
+                                        if msg.contains("Invalid request") {
+                                            panic!("Invalid request to Okx with code: {}", code);
+                                        }
+                                        // TODO: other types of error?
+                                        continue;
+                                    }
+
+                                    if i.event == "subscribe" {
+                                        continue;
+                                    }
+                                }
                                 Event::DepthOrderBook(d) => {
-                                    if let Err(e) = tx.send(Event::DepthOrderBook(d)) {
-                                        log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                    if d.action == "snapshot" || d.action == "update" {
+                                        if let Err(e) = tx.send(Event::DepthOrderBook(d)) {
+                                            log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
+                                        }
                                     }
                                 }
                                 Event::PublicTrade(t) => {
-                                    println!("{}-{}", t.event_type, t.symbol);
+                                    println!("{:?}", t);
                                 }
                             }
                         }

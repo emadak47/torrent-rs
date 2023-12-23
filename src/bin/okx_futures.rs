@@ -1,4 +1,4 @@
-use async_wss::exchanges::okx::{orderbook::OkxFeedManager, spot::SpotWSClientBuilder};
+use async_wss::exchanges::okx::{futures::FuturesWSClientBuilder, orderbook::OkxFeedManager};
 
 #[tokio::main]
 async fn main() {
@@ -8,9 +8,9 @@ async fn main() {
     pretty_env_logger::init();
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
-    let mut ws_builder = SpotWSClientBuilder::default();
+    let mut ws_builder = FuturesWSClientBuilder::default();
     // ws_builder.sub_trade("ETHUSDT");
-    ws_builder.sub_ob_depth("BTC-USDT");
+    ws_builder.sub_ob_depth("BTC-USDT-SWAP");
 
     let ws_client = ws_builder
         .build()

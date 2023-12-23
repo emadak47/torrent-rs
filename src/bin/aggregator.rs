@@ -110,7 +110,7 @@ fn main() {
                     }
                 }
                 Err(QueueError::EmptyQueue) => {
-                    log::trace!("no event to be sent to extneral service")
+                    log::trace!("no event to be sent to external service")
                 }
             }
         }

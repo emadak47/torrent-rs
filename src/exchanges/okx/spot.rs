@@ -37,7 +37,7 @@ impl Default for SpotWSClientBuilder {
     fn default() -> Self {
         let config = Config::okx();
         Self {
-            url: config.spot_ws_endpoint.into(),
+            url: config.spot_ws_endpoint,
             topics: Vec::new(),
         }
     }
@@ -67,14 +67,14 @@ impl SpotWSClientBuilder {
     }
 }
 
+type SharedWSS = Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>;
 pub struct SpotWSClient {
     url: String,
     topics: Vec<HashMap<String, String>>,
-    write: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
+    write: Option<SharedWSS>,
 }
 
 impl SpotWSClient {
-    #[must_use]
     pub async fn connect(
         self,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
@@ -142,7 +142,7 @@ impl SpotWSClient {
             return Ok(());
         }
 
-        let ref topic = vec![param.clone()];
+        let topic = &vec![param.clone()];
         let sub = Sub::new(Methods::Subscribe, Some(topic));
         let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
@@ -163,7 +163,7 @@ impl SpotWSClient {
             return Ok(());
         }
 
-        let ref topic = vec![param.clone()];
+        let topic = &vec![param.clone()];
         let unsub = Sub::new(Methods::Unsubscribe, Some(topic));
         let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 
