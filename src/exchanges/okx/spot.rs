@@ -1,33 +1,13 @@
-use super::types::Event;
+use super::types::{Event, Methods, Subscription};
 use crate::exchanges::Config;
 use failure::{Error, ResultExt};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use serde::Serialize;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-
-#[derive(Debug, Serialize)]
-struct Sub<'a> {
-    op: Methods,
-    args: Option<&'a Vec<HashMap<String, String>>>,
-}
-
-impl<'a> Sub<'a> {
-    pub(crate) fn new(op: Methods, args: Option<&'a Vec<HashMap<String, String>>>) -> Self {
-        Self { op, args }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Methods {
-    Subscribe,
-    Unsubscribe,
-}
 
 pub struct SpotWSClientBuilder {
     url: String,
@@ -86,7 +66,7 @@ impl SpotWSClient {
         let (mut write, read) = stream.split();
 
         if !self.topics.is_empty() {
-            let sub = Sub::new(Methods::Subscribe, Some(&self.topics));
+            let sub = Subscription::new(Methods::Subscribe, Some(&self.topics));
             let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
             write
@@ -143,7 +123,7 @@ impl SpotWSClient {
         }
 
         let topic = &vec![param.clone()];
-        let sub = Sub::new(Methods::Subscribe, Some(topic));
+        let sub = Subscription::new(Methods::Subscribe, Some(topic));
         let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
@@ -164,7 +144,7 @@ impl SpotWSClient {
         }
 
         let topic = &vec![param.clone()];
-        let unsub = Sub::new(Methods::Unsubscribe, Some(topic));
+        let unsub = Subscription::new(Methods::Unsubscribe, Some(topic));
         let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
 
         let write = self.write.as_ref().unwrap();
@@ -180,7 +160,7 @@ impl SpotWSClient {
     }
 
     pub async fn run(
-        write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+        write: SharedWSS,
         mut read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
     ) {

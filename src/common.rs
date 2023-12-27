@@ -27,6 +27,7 @@ pub enum Side {
 
 pub enum SymbolPair<'a> {
     BinanceSpot(&'a str),
+    BinanceFutures(&'a str),
     OkxSpot(&'a str),
     OkxFutures(&'a str),
 }
@@ -43,6 +44,19 @@ pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
                 base: base.as_str().to_string(),
                 quote: quote.as_str().to_string(),
                 product: "spot".to_string(),
+            });
+        }
+        SymbolPair::BinanceFutures(symb) => {
+            let symb = symb.strip_suffix("FUTURES")?;
+            let regex =
+                regex::Regex::new(r"^(\w+)(BTC|TRY|ETH|BNB|USDT|PAX|TUSD|USDC|XRP|USDS)$").ok()?;
+            let capture = regex.captures(symb)?;
+            let (base, quote) = (capture.get(1)?, capture.get(2)?);
+
+            return Some(CcyPair {
+                base: base.as_str().to_string(),
+                quote: quote.as_str().to_string(),
+                product: "futures".to_string(),
             });
         }
         SymbolPair::OkxSpot(symb) => {
