@@ -1,5 +1,23 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Methods {
+    Subscribe,
+    Unsubscribe,
+}
+#[derive(Debug, Serialize)]
+pub struct Subscription<'a, T> {
+    op: Methods,
+    args: Option<&'a Vec<T>>,
+}
+
+impl<'a, T> Subscription<'a, T> {
+    pub(crate) fn new(op: Methods, args: Option<&'a Vec<T>>) -> Self {
+        Self { op, args }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Event {

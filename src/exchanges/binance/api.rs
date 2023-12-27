@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 
 pub enum API {
     Spot(Spot),
+    Futures(Futures),
 }
 
 pub enum Spot {
@@ -31,6 +32,10 @@ pub enum Spot {
     Account,
     MyTrades,
     UserDataStream,
+}
+
+pub enum Futures {
+    Depth,
 }
 
 impl From<API> for String {
@@ -60,6 +65,9 @@ impl From<API> for String {
                 Spot::Account => "/api/v3/account",
                 Spot::MyTrades => "/api/v3/myTrades",
                 Spot::UserDataStream => "/api/v3/userDataStream",
+            },
+            API::Futures(route) => match route {
+                Futures::Depth => "/fapi/v1/depth",
             },
         })
     }

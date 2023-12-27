@@ -1,5 +1,5 @@
 use super::types::{Event, Methods, Subscription};
-use crate::exchanges::Config;
+use crate::exchanges::{binance::types::FuturesDepthOrderBookEvent, Config};
 use failure::{Error, ResultExt};
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -10,34 +10,29 @@ use std::sync::Arc;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 
-pub struct SpotWSClientBuilder {
+pub struct FuturesWSClientBuilder {
     url: String,
     topics: Vec<String>,
 }
 
-impl Default for SpotWSClientBuilder {
+impl Default for FuturesWSClientBuilder {
     fn default() -> Self {
         let config = Config::binance();
         Self {
-            url: config.spot_ws_endpoint,
+            url: config.futures_ws_endpoint,
             topics: Vec::new(),
         }
     }
 }
 
-impl SpotWSClientBuilder {
-    pub fn sub_trade(&mut self, symb: impl Into<String>) {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
-        self.topics.push(param);
-    }
-
+impl FuturesWSClientBuilder {
     pub fn sub_ob_depth(&mut self, symb: impl Into<String>) {
         let param = format!("{}@depth", symb.into()).to_lowercase();
         self.topics.push(param);
     }
 
-    pub async fn build(self) -> Result<SpotWSClient, Error> {
-        Ok(SpotWSClient {
+    pub async fn build(self) -> Result<FuturesWSClient, Error> {
+        Ok(FuturesWSClient {
             url: self.url,
             topics: self.topics,
             id: 0,
@@ -47,14 +42,14 @@ impl SpotWSClientBuilder {
 }
 
 type SharedWSS = Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>;
-pub struct SpotWSClient {
+pub struct FuturesWSClient {
     url: String,
     topics: Vec<String>,
     id: usize,
     write: Option<SharedWSS>,
 }
 
-impl SpotWSClient {
+impl FuturesWSClient {
     pub async fn connect(
         self,
         tx: tokio::sync::mpsc::UnboundedSender<Event>,
@@ -67,16 +62,16 @@ impl SpotWSClient {
 
         if !self.topics.is_empty() {
             let sub = Subscription::new(Methods::Subscribe, Some(&self.topics), &0);
-            let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
+            let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
 
             write
                 .send(Message::Text(sub_req))
                 .await
-                .context("failed to send init sub request to stream")?;
+                .expect("failed to send init sub request to stream");
         }
         let write = Arc::new(Mutex::new(write));
 
-        tokio::spawn(SpotWSClient::run(Arc::clone(&write), read, tx));
+        tokio::spawn(FuturesWSClient::run(Arc::clone(&write), read, tx));
 
         Ok(Self {
             url: self.url,
@@ -86,19 +81,9 @@ impl SpotWSClient {
         })
     }
 
-    pub async fn sub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
-        self.subscribe(param).await
-    }
-
     pub async fn sub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
         let param = format!("{}@depth", symb.into()).to_lowercase();
         self.subscribe(param).await
-    }
-
-    pub async fn unsub_trade(&mut self, symb: impl Into<String>) -> Result<(), Error> {
-        let param = format!("{}@trade", symb.into()).to_lowercase();
-        self.unsubscribe(param).await
     }
 
     pub async fn unsub_ob_depth(&mut self, symb: impl Into<String>) -> Result<(), Error> {
@@ -118,7 +103,7 @@ impl SpotWSClient {
 
         let topic = &vec![param.clone()];
         let sub = Subscription::new(Methods::Subscribe, Some(topic), &self.id);
-        let sub_req = serde_json::to_string(&sub).context("failed to serialise sub request")?;
+        let sub_req = serde_json::to_string(&sub).expect("failed to serialise sub request");
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;
@@ -141,7 +126,7 @@ impl SpotWSClient {
 
         let topic = &vec![param.clone()];
         let unsub = Subscription::new(Methods::Unsubscribe, Some(topic), &self.id);
-        let unsub_req = serde_json::to_string(&unsub).context("failed to serialise sub request")?;
+        let unsub_req = serde_json::to_string(&unsub).expect("failed to serialise sub request");
 
         let write = self.write.as_ref().unwrap();
         let mut write = write.lock().await;
@@ -166,7 +151,7 @@ impl SpotWSClient {
                 Some(res) => match res {
                     Ok(msg) => match msg {
                         Message::Text(msg) => {
-                            let value: serde_json::Value = match serde_json::from_str(&msg) {
+                            let mut value: serde_json::Value = match serde_json::from_str(&msg) {
                                 Ok(v) => v,
                                 Err(e) => {
                                     log::error!("Failed to serialise binance msg\n{:?}", e);
@@ -178,23 +163,30 @@ impl SpotWSClient {
                                 continue;
                             }
 
-                            let event = match serde_json::from_str(value.to_string().as_str()) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    log::error!("Failed to serialise binance event\n{:?}", e);
-                                    continue;
-                                }
-                            };
+                            if value.get("data").is_some() {
+                                let data = value["data"].take();
+                                if data.get("pu").is_some() {
+                                    let d: FuturesDepthOrderBookEvent =
+                                        match serde_json::from_value(data) {
+                                            Ok(d) => d,
+                                            Err(e) => {
+                                                log::error!(
+                                                    "Failed to serialise binance event\n{:?}",
+                                                    e
+                                                );
+                                                continue;
+                                            }
+                                        };
 
-                            match event {
-                                Event::SpotDepthOrderBook(d) => {
-                                    if let Err(e) = tx.send(Event::SpotDepthOrderBook(d)) {
+                                    if let Err(e) = tx.send(Event::FuturesDepthOrderBook(d)) {
                                         log::error!("Error sending depth ob event through tokio channel \n {:#?}", e);
                                     }
+                                } else {
+                                    continue;
                                 }
-                                _ => {
-                                    log::trace!("received an unexpected event: {:?}", event);
-                                }
+                            } else {
+                                log::warn!("binance stream didn't send data payload");
+                                continue;
                             }
                         }
                         Message::Ping(_) => {
