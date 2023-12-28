@@ -1,4 +1,5 @@
 pub mod binance;
+pub mod bullish;
 pub mod okx;
 
 #[derive(Clone, Debug)]
@@ -25,6 +26,16 @@ impl Config {
             spot_rest_api_endpoint: "https://www.okx.com/".into(),
             futures_rest_api_endpoint: "https://www.okx.com/".into(),
             spot_ws_endpoint: "wss://ws.okx.com:8443/ws/v5/public".into(),
+            futures_ws_endpoint: "wss://ws.okx.com:8443/ws/v5/public".into(),
+        }
+    }
+
+    pub fn bullish() -> Self {
+        // same endpoints
+        Self {
+            spot_rest_api_endpoint: "https://www.okx.com/".into(),
+            futures_rest_api_endpoint: "https://www.okx.com/".into(),
+            spot_ws_endpoint: "wss://registered.api.exchange.bullish.com".into(),
             futures_ws_endpoint: "wss://ws.okx.com:8443/ws/v5/public".into(),
         }
     }
