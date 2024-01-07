@@ -144,14 +144,14 @@ impl BullishFeedManager {
         let encoding;
 
         if is_first_update {
-            event = make_snapshot_event(bids_flat, asks_flat, pair, Exchange::Okx)?;
+            event = make_snapshot_event(bids_flat, asks_flat, pair, Exchange::Bullish)?;
             encoding = Encoding::APP_CUSTOM
                 .with_suffix("snapshot_event")
                 .map_err(|e| {
                     failure::err_msg(format!("failed to encode snapshot event\n{:?}", e))
                 })?;
         } else {
-            event = make_update_event(bids_flat, asks_flat, pair, Exchange::Okx)?;
+            event = make_update_event(bids_flat, asks_flat, pair, Exchange::Bullish)?;
             encoding = Encoding::APP_CUSTOM
                 .with_suffix("update_event")
                 .map_err(|e| failure::err_msg(format!("failed to encode update event\n{:?}", e)))?;
