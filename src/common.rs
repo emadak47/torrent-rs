@@ -9,6 +9,7 @@ pub fn scale<'a>(num: impl Into<&'a str>) -> Result<u64, std::num::ParseFloatErr
 pub enum Exchange {
     Binance,
     Okx,
+    Bullish,
 }
 
 impl From<Exchange> for String {
@@ -16,6 +17,7 @@ impl From<Exchange> for String {
         match value {
             Exchange::Binance => String::from("binance"),
             Exchange::Okx => String::from("okx"),
+            Exchange::Bullish => String::from("bullish"),
         }
     }
 }
@@ -30,6 +32,7 @@ pub enum SymbolPair<'a> {
     BinanceFutures(&'a str),
     OkxSpot(&'a str),
     OkxFutures(&'a str),
+    BullishFutures(&'a str),
 }
 
 pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
@@ -73,6 +76,19 @@ pub fn get_symbol_pair(pair: SymbolPair) -> Option<CcyPair> {
             }
         }
         SymbolPair::OkxFutures(symb) => {
+            let parts = symb.split('-').collect::<Vec<&str>>();
+
+            if parts.len() == 3 {
+                Some(CcyPair {
+                    base: parts[0].to_string(),
+                    quote: parts[1].to_string(),
+                    product: "futures".to_string(),
+                })
+            } else {
+                None
+            }
+        }
+        SymbolPair::BullishFutures(symb) => {
             let parts = symb.split('-').collect::<Vec<&str>>();
 
             if parts.len() == 3 {

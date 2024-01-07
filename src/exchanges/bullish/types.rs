@@ -33,3 +33,29 @@ impl Subscription {
         }
     }
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Level2Changes {
+    pub symbol: String,
+    pub bids: Vec<String>, 
+    pub asks: Vec<String>, 
+    pub sequence_number_range: [u64; 2], 
+    pub datetime: String,
+    pub timestamp: String,
+    pub published_at_timestamp: String, 
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderBookResp {
+    pub r#type: String,
+    pub data_type: String,
+    pub data: Level2Changes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Event {
+    OrderBookMsg(OrderBookResp),
+}
