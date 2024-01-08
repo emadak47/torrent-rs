@@ -16,11 +16,11 @@ struct OrderbookMeta {
     /// stores the actual book
     book: OrderbookL2,
     /// stores the meta data status of the book for local maintenance  
-    data: BinanceOrderbookMetaData,
+    data: BullishOrderbookMetaData,
 }
 
 #[derive(Debug)]
-struct BinanceOrderbookMetaData {
+struct BullishOrderbookMetaData {
     last_update_id: u64,
 }
 
@@ -69,7 +69,7 @@ impl BullishFeedManager {
             symbol.into().to_string(),
             OrderbookMeta {
                 book: OrderbookL2::new(),
-                data: BinanceOrderbookMetaData {
+                data: BullishOrderbookMetaData {
                     last_update_id: 0,
                 },
             },
