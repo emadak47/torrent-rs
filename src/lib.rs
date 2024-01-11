@@ -1,7 +1,9 @@
 pub mod aggregator;
+pub mod coinbase;
 pub mod common;
 pub mod exchanges;
 pub mod flatbuffer;
+pub mod okx;
 pub mod orderbook;
 pub mod spsc;
 pub mod utils;
