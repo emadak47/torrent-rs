@@ -4,6 +4,106 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Message {
+    Level2(Level2Message),
+    Heartbeats(HeartbeatsMessage),
+    Subscribe(SubscribeMessage),
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Level2Update {
+    pub side: String,
+    pub event_time: String,
+    #[serde(deserialize_with = "from_str")]
+    pub price_level: f64,
+    #[serde(deserialize_with = "from_str")]
+    pub new_quantity: f64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SubscribeUpdate {
+    #[serde(default)]
+    pub status: Vec<String>,
+    #[serde(default)]
+    pub ticker: Vec<String>,
+    #[serde(default)]
+    pub ticker_batch: Vec<String>,
+    #[serde(default)]
+    pub level2: Option<Vec<String>>,
+    #[serde(default)]
+    pub user: Option<Vec<String>>,
+    #[serde(default)]
+    pub market_trades: Option<Vec<String>>,
+    #[serde(default)]
+    pub heartbeats: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Level2Event {
+    pub r#type: String,
+    pub product_id: String,
+    pub updates: Vec<Level2Update>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HeartbeatsEvent {
+    pub current_time: String,
+    pub heartbeat_counter: u64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SubscribeEvent {
+    pub subscriptions: SubscribeUpdate,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Level2Message {
+    pub channel: String,
+    pub client_id: String,
+    pub timestamp: String,
+    pub sequence_num: u64,
+    pub events: Vec<Level2Event>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HeartbeatsMessage {
+    pub channel: String,
+    pub client_id: String,
+    pub timestamp: String,
+    pub sequence_num: u64,
+    pub events: Vec<HeartbeatsEvent>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SubscribeMessage {
+    pub channel: String,
+    pub client_id: String,
+    pub timestamp: String,
+    pub sequence_id: u64,
+    pub events: Vec<SubscribeEvent>,
+}
+
+#[derive(Serialize, Debug)]
+struct LegacySubscription {
+    pub r#type: String,
+    pub product_ids: Vec<String>,
+    pub channel: String,
+    pub api_key: String,
+    pub timestamp: String,
+    pub signature: String,
+}
+
+#[derive(Serialize, Debug)]
+struct JwtSubscription {
+    pub r#type: String,
+    pub product_ids: Vec<String>,
+    pub channel: String,
+    pub jwt: String,
+    pub timestamp: String,
+}
+
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Channel {
