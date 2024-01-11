@@ -1,7 +1,24 @@
 use serde::{Deserialize, Deserializer};
+use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Result<T> = std::result::Result<T, TorrentError>;
+
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+pub enum Exchange {
+    OKX,
+    COINBASE,
+}
+
+impl fmt::Display for Exchange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Exchange::COINBASE => write!(f, "Coinbase"),
+            Exchange::OKX => write!(f, "Okx"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum TorrentError {
