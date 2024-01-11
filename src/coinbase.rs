@@ -1,7 +1,5 @@
-use crate::{
-    utils::{now, Result, TorrentError},
-    websocket::Wss,
-};
+use crate::utils::{from_str, now, Result, TorrentError};
+use crate::websocket::{MessageCallback, Wss};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -9,7 +7,6 @@ use std::fmt;
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Channel {
-    STATUS,
     LEVEL2,
     HEARTBEATS,
 }
@@ -19,14 +16,15 @@ impl fmt::Display for Channel {
         match self {
             Channel::HEARTBEATS => write!(f, "heartbeats"),
             Channel::LEVEL2 => write!(f, "level2"),
-            Channel::STATUS => write!(f, "status"),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Coinbase {
-    api_key: String,
+    key_name: String,
     private_key: String,
+    is_legacy: bool,
 }
 
 impl fmt::Display for Coinbase {
@@ -38,18 +36,19 @@ impl fmt::Display for Coinbase {
 impl Coinbase {
     pub const URL: &'static str = "wss://advanced-trade-ws.coinbase.com";
 
-    pub fn new(api_key: String, private_key: String) -> Self {
+    pub fn new(key_name: String, private_key: String, is_legacy: bool) -> Self {
         Self {
-            api_key,
+            key_name,
             private_key,
+            is_legacy,
         }
     }
 
-    pub fn sign_ws(
+    fn legacy_sign(
         &self,
         timestamp: &str,
         channel: &str,
-        product_ids: Vec<String>,
+        product_ids: &[String],
     ) -> Result<String> {
         let prehash = format!("{}{}{}", timestamp, channel, product_ids.join(","));
         let prehash_bytes = prehash.as_bytes();
@@ -62,12 +61,42 @@ impl Coinbase {
         let signature_bytes = mac.finalize().into_bytes();
         Ok(hex::encode(signature_bytes))
     }
+
+    fn jwt_sign(&self, _timestamp: &str) -> Result<String> {
+        let _private_key_bytes = self.private_key.as_bytes();
+        unimplemented!()
+    }
 }
 
 impl Wss for Coinbase {
     fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String> {
         let timestamp = now().to_string();
-        let _signature = self.sign_ws(timestamp.as_str(), channel.as_str(), topics.clone())?;
-        Ok(String::from("Hello from Coinbase"))
+        let sub = if self.is_legacy {
+            let signature = self.legacy_sign(timestamp.as_str(), channel.as_str(), &topics)?;
+            let legacy_sub = LegacySubscription {
+                r#type: "subscribe".to_string(),
+                product_ids: topics,
+                channel,
+                api_key: self.key_name.clone(),
+                timestamp,
+                signature,
+            };
+            serde_json::to_string(&legacy_sub)
+        } else {
+            let jwt = self.jwt_sign(timestamp.as_str())?;
+            let jwt_sub = JwtSubscription {
+                r#type: "subscribe".to_string(),
+                product_ids: topics,
+                channel,
+                jwt,
+                timestamp,
+            };
+            serde_json::to_string(&jwt_sub)
+        };
+
+        match sub {
+            Ok(s) => Ok(s),
+            Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
+        }
     }
 }
