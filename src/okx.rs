@@ -203,3 +203,28 @@ impl Wss for Okx {
         }
     }
 }
+
+pub struct Manager;
+
+impl MessageCallback<Message> for Manager {
+    fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
+        let msg = msg?;
+        match msg {
+            Message::Failure(m) => {
+                if m.msg.contains("Invalid request") {
+                    // TODO: panic?
+                } else if m.msg.contains("Connection refused") {
+                    // TODO: Sleep then reconnect
+                }
+                unimplemented!()
+            }
+            Message::Subscribe(_m) => {
+                unimplemented!()
+            }
+            Message::Books(_m) => {
+                unimplemented!()
+            }
+        }
+        Ok(())
+    }
+}
