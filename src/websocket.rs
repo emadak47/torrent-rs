@@ -1,10 +1,11 @@
+use crate::utils::{from_str, now, Result, TorrentError};
+use core::fmt;
 use futures_util::{
     stream::{SplitSink, SplitStream},
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -15,7 +16,6 @@ use tokio_tungstenite::{
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type SocketReader = SplitStream<Socket>;
 type SocketWriter = SplitSink<Socket, tungstenite::Message>;
-type Result<T> = std::result::Result<T, TorrentError>;
 type Callback<T> = fn(Result<T>);
 
 pub trait MessageCallback<T> {
@@ -38,23 +38,8 @@ impl std::fmt::Display for Exchange {
     }
 }
 
-#[derive(Debug)]
-pub enum TorrentError {
-    BadConnection(String),
-    BadParse(String),
-}
-
-impl std::fmt::Display for TorrentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TorrentError::BadConnection(v) => write!(f, "connection error: {}", v),
-            TorrentError::BadParse(v) => write!(f, "prasing error: {}", v),
-        }
-    }
-}
-
 pub trait Wss: std::fmt::Display {
-    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<()>;
+    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String>;
 }
 
 #[allow(non_camel_case_types)]
@@ -63,6 +48,16 @@ pub enum CoinbaseChannel {
     STATUS,
     LEVEL2,
     HEARTBEATS,
+}
+
+impl fmt::Display for CoinbaseChannel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CoinbaseChannel::HEARTBEATS => write!(f, "heartbeats"),
+            CoinbaseChannel::LEVEL2 => write!(f, "level2"),
+            CoinbaseChannel::STATUS => write!(f, "status"),
+        }
+    }
 }
 
 struct Coinbase {
@@ -106,11 +101,10 @@ impl Coinbase {
 }
 
 impl Wss for Coinbase {
-    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<()> {
+    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String> {
         let timestamp = now().to_string();
-        let signature = self.sign_ws(timestamp.as_str(), channel.as_str(), topics)?;
-        dbg!(signature);
-        Ok(())
+        let _signature = self.sign_ws(timestamp.as_str(), channel.as_str(), topics.clone())?;
+        Ok(String::from("Hello from Coinbase"))
     }
 }
 
@@ -131,8 +125,8 @@ impl std::fmt::Display for Okx {
 }
 
 impl Wss for Okx {
-    fn subscribe(&self, _channel: String, _topics: Vec<String>) -> Result<()> {
-        Ok(())
+    fn subscribe(&self, _channel: String, _topics: Vec<String>) -> Result<String> {
+        Ok(String::from("Hello from Okx"))
     }
 }
 
@@ -191,12 +185,18 @@ impl WebSocketClient {
         Ok(reader)
     }
 
-    async fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<()> {
+    pub async fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<()> {
         match &self.exchange {
-            Some(ex) => match &self.socket_w {
-                Some(_socket) => {
-                    ex.subscribe(channel, topics)?;
-                    Ok(())
+            Some(ex) => match &mut self.socket_w {
+                Some(ref mut socket) => {
+                    let sub_req = ex.subscribe(channel, topics)?;
+                    match socket.send(tungstenite::Message::text(sub_req)).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(TorrentError::BadConnection(format!(
+                            "couldn't write to socket: {}",
+                            e
+                        ))),
+                    }
                 }
                 None => Err(TorrentError::BadParse(format!(
                     "Not connected to {} socket",
@@ -208,18 +208,4 @@ impl WebSocketClient {
             )),
         }
     }
-}
-
-#[macro_export]
-macro_rules! dbg {
-    ($fmt:expr $(, $($arg:tt)*)?) => {
-        println!(concat!("[DEBUG] ", $fmt), $($($arg)*)?);
-    };
-}
-
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backword")
-        .as_secs()
 }
