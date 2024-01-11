@@ -18,7 +18,7 @@ type SocketWriter = SplitSink<Socket, tungstenite::Message>;
 type Callback<T> = fn(Result<T>);
 
 pub trait MessageCallback<T> {
-    fn message_callback(&mut self, msg: Result<T>);
+    fn message_callback(&mut self, msg: Result<T>) -> Result<()>;
 }
 
 pub trait Wss: std::fmt::Display {
@@ -102,5 +102,32 @@ impl WebSocketClient {
                 "Not connected to exchange".to_string(),
             )),
         }
+    }
+
+    pub async fn listen_with<T, M>(reader: SocketReader, callback_manager: M)
+    where
+        M: MessageCallback<T>,
+        T: serde::de::DeserializeOwned,
+    {
+        let mut manager: M = callback_manager;
+
+        let read_fut = reader.for_each(|m| {
+            let data: String = match m {
+                Ok(v) => v.to_string(),
+                Err(e) => format!("websocket sent the error: {}", e),
+            };
+
+            let _ = match serde_json::from_str(&data) {
+                Ok(msg) => manager.message_callback(Ok(msg)),
+                Err(e) => manager.message_callback(Err(TorrentError::BadParse(format!(
+                    "Unable to parse msg because {} {}",
+                    e, data
+                )))),
+            };
+
+            async {}
+        });
+
+        read_fut.await
     }
 }
