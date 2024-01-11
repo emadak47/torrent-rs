@@ -68,7 +68,12 @@ impl WebSocketClient {
 
         match exchange {
             Exchange::COINBASE => {
-                let coinbase = Coinbase::new("k".to_string(), "p".to_string());
+                let key_name = std::env::var("KEY_NAME").unwrap_or_default();
+                let private_key = std::env::var("PRIVATE_KEY").unwrap_or_default();
+                if key_name.is_empty() || private_key.is_empty() {
+                    panic!("Coinbase credentails uninitalised. See `.env.example`");
+                }
+                let coinbase = Coinbase::new(key_name, private_key, true);
                 self.exchange = Some(Box::new(coinbase));
             }
             Exchange::OKX => {
