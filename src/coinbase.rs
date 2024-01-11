@@ -200,3 +200,23 @@ impl Wss for Coinbase {
         }
     }
 }
+
+pub struct Manager;
+
+impl MessageCallback<Message> for Manager {
+    fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
+        let msg = msg?;
+        match msg {
+            Message::Subscribe(_m) => {
+                unimplemented!()
+            }
+            Message::Heartbeats(_m) => {
+                unimplemented!()
+            }
+            Message::Level2(_m) => {
+                unimplemented!()
+            }
+        }
+        Ok(())
+    }
+}
