@@ -24,6 +24,7 @@ impl fmt::Display for Exchange {
 pub enum TorrentError {
     BadConnection(String),
     BadParse(String),
+    Unknown(String),
 }
 
 impl std::fmt::Display for TorrentError {
@@ -31,6 +32,7 @@ impl std::fmt::Display for TorrentError {
         match self {
             TorrentError::BadConnection(v) => write!(f, "connection error: {}", v),
             TorrentError::BadParse(v) => write!(f, "prasing error: {}", v),
+            TorrentError::Unknown(v) => write!(f, "unknown error: {}", v),
         }
     }
 }
