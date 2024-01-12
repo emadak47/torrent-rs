@@ -22,6 +22,8 @@ impl fmt::Display for Exchange {
 
 #[derive(Debug)]
 pub enum TorrentError {
+    BadStatus(String),
+    BadRequest(String),
     BadConnection(String),
     BadParse(String),
     Unknown(String),
@@ -30,6 +32,8 @@ pub enum TorrentError {
 impl std::fmt::Display for TorrentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            TorrentError::BadStatus(v) => write!(f, "non-200 status code: {}", v),
+            TorrentError::BadRequest(v) => write!(f, "request error: {}", v),
             TorrentError::BadConnection(v) => write!(f, "connection error: {}", v),
             TorrentError::BadParse(v) => write!(f, "prasing error: {}", v),
             TorrentError::Unknown(v) => write!(f, "unknown error: {}", v),
