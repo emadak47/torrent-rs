@@ -5,6 +5,7 @@ pub mod exchanges;
 pub mod flatbuffer;
 pub mod okx;
 pub mod orderbook;
+pub mod rest;
 pub mod spsc;
 pub mod utils;
 pub mod websocket;
