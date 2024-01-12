@@ -9,6 +9,7 @@ pub type Result<T> = std::result::Result<T, TorrentError>;
 pub enum Exchange {
     OKX,
     COINBASE,
+    BINANCE,
 }
 
 impl fmt::Display for Exchange {
@@ -16,6 +17,7 @@ impl fmt::Display for Exchange {
         match self {
             Exchange::COINBASE => write!(f, "Coinbase"),
             Exchange::OKX => write!(f, "Okx"),
+            Exchange::BINANCE => write!(f, "Binance"),
         }
     }
 }
