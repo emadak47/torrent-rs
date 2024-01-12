@@ -51,6 +51,7 @@ impl WebSocketClient {
         let url = match exchange {
             Exchange::COINBASE => Coinbase::URL,
             Exchange::OKX => Okx::URL,
+            Exchange::BINANCE => Binance::URL,
         };
 
         let reader = match connect_async(url).await {
@@ -80,6 +81,10 @@ impl WebSocketClient {
             Exchange::OKX => {
                 let okx = Okx::new();
                 self.exchange = Some(Box::new(okx));
+            }
+            Exchange::BINANCE => {
+                let binance = Binance::new();
+                self.exchange = Some(Box::new(binance));
             }
         };
 
