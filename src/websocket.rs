@@ -1,3 +1,4 @@
+use crate::binance::Binance;
 use crate::coinbase::Coinbase;
 use crate::okx::Okx;
 use crate::utils::{Exchange, Result, TorrentError};
@@ -22,7 +23,7 @@ pub trait MessageCallback<T> {
 }
 
 pub trait Wss: std::fmt::Display {
-    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String>;
+    fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String>;
 }
 
 #[derive(Default)]
@@ -86,7 +87,7 @@ impl WebSocketClient {
     }
 
     pub async fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<()> {
-        match &self.exchange {
+        match &mut self.exchange {
             Some(ex) => match &mut self.socket_w {
                 Some(ref mut socket) => {
                     let sub_req = ex.subscribe(channel, topics)?;
