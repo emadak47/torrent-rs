@@ -187,7 +187,7 @@ impl Okx {
 }
 
 impl Wss for Okx {
-    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String> {
+    fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String> {
         let args = topics
             .into_iter()
             .map(|t| Arg::new(channel.clone(), t, "SPOT".to_string()))
@@ -208,8 +208,7 @@ pub struct Manager;
 
 impl MessageCallback<Message> for Manager {
     fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
-        let msg = msg?;
-        match msg {
+        match msg? {
             Message::Failure(m) => {
                 if m.msg.contains("Invalid request") {
                     // TODO: panic?

@@ -169,7 +169,7 @@ impl Coinbase {
 }
 
 impl Wss for Coinbase {
-    fn subscribe(&self, channel: String, topics: Vec<String>) -> Result<String> {
+    fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String> {
         let timestamp = now().to_string();
         let sub = if self.is_legacy {
             let signature = self.legacy_sign(timestamp.as_str(), channel.as_str(), &topics)?;
