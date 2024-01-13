@@ -31,8 +31,8 @@ pub enum TorrentError {
     Unknown(String),
 }
 
-impl std::fmt::Display for TorrentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TorrentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TorrentError::BadStatus(v) => write!(f, "non-200 status code: {}", v),
             TorrentError::BadRequest(v) => write!(f, "request error: {}", v),
@@ -60,7 +60,7 @@ enum StringOrNumeric {
 pub fn from_str<'de, S, D>(deserializer: D) -> std::result::Result<S, D::Error>
 where
     S: std::str::FromStr + Default,
-    S::Err: std::fmt::Display,
+    S::Err: fmt::Display,
     D: Deserializer<'de>,
 {
     let s: String = match Deserialize::deserialize(deserializer) {

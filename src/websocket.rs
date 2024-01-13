@@ -6,6 +6,7 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use std::fmt;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -22,7 +23,7 @@ pub trait MessageCallback<T> {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()>;
 }
 
-pub trait Wss: std::fmt::Display {
+pub trait Wss: fmt::Display {
     fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String>;
 }
 
