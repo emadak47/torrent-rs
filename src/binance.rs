@@ -1,7 +1,7 @@
 use crate::utils::{Result, TorrentError};
 use crate::websocket::{MessageCallback, Wss};
 use serde::{Deserialize, Serialize};
-use std::fmt::{self};
+use std::fmt;
 use std::ops::Deref;
 
 #[derive(Deserialize, Debug)]
@@ -151,6 +151,20 @@ impl Wss for Binance {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RequestError {
+    code: i16,
+    msg: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DepthSnapshot {
+    last_update_id: u64,
+    bids: Vec<LevelUpdate>,
+    asks: Vec<LevelUpdate>,
+}
+
 pub struct Manager;
 
 impl MessageCallback<Message> for Manager {
@@ -163,5 +177,29 @@ impl MessageCallback<Message> for Manager {
                 unimplemented!()
             }
         }
+    }
+}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "code: {}, msg: {}", self.code, self.msg)
+    }
+}
+
+pub enum API {
+    Spot(Spot),
+}
+
+pub enum Spot {
+    Depth,
+}
+
+impl From<API> for String {
+    fn from(item: API) -> Self {
+        String::from(match item {
+            API::Spot(route) => match route {
+                Spot::Depth => "/api/v3/depth",
+            },
+        })
     }
 }
