@@ -141,4 +141,93 @@ impl WebSocketClient {
 
         read_fut.await
     }
+
+    // TODO: make it generic over exchange type
+    pub async fn depth_subscribe<M, E>(
+        &mut self,
+        topics: Vec<String>,
+        callback_manager: M,
+    ) -> Result<tokio::task::JoinHandle<()>>
+    where
+        M: DepthCallback + Send + 'static,
+        E: std::fmt::Display + serde::de::DeserializeOwned + 'static,
+    {
+        let exchange = Exchange::BINANCE;
+        let channel = crate::binance::Channel::DEPTH.to_string();
+        let endpoint = crate::binance::API::Spot(crate::binance::Spot::Depth);
+        let params = [
+            ("symbol".to_string(), "BTCUSDT".to_string()),
+            ("limit".to_string(), "5000".to_string()),
+        ];
+        let reader = match self.connect(exchange).await {
+            Ok(reader) => reader,
+            Err(err) => return Err(err),
+        };
+        match self.subscribe(channel, topics).await {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        let listener = tokio::spawn(
+            DepthManager::<M, crate::binance::DepthSnapshot>::request_snapshot::<
+                [(String, String); 2],
+                E,
+            >(reader, endpoint, Some(params), callback_manager),
+        );
+        Ok(listener)
+    }
+}
+
+// TODO: make it generic
+pub trait DepthCallback {
+    const REST_URL: &'static str;
+
+    fn depth_callback(&mut self, msg: String);
+}
+
+pub struct DepthManager<M, Snapshot>
+where
+    M: DepthCallback,
+    Snapshot: serde::de::DeserializeOwned,
+{
+    user_manager: M,
+    depth_snapshot: Snapshot,
+}
+
+impl<M, Snapshot> DepthManager<M, Snapshot>
+where
+    M: DepthCallback,
+    Snapshot: serde::de::DeserializeOwned + std::fmt::Debug,
+{
+    pub async fn request_snapshot<S, E>(
+        reader: SocketReader,
+        endpoint: impl Into<String>,
+        params: Option<S>,
+        callback_manager: M,
+    ) where
+        M: DepthCallback,
+        S: serde::Serialize + std::fmt::Debug,
+        E: std::fmt::Display + serde::de::DeserializeOwned,
+    {
+        let rest_client = crate::rest::RestClient::new(M::REST_URL);
+        let depth_snapshot = match rest_client.get::<Snapshot, E, S>(endpoint, params).await {
+            Ok(depth_snapshot) => depth_snapshot,
+            Err(e) => return, // TODO: handle error
+        };
+        let manager = Self {
+            depth_snapshot,
+            user_manager: callback_manager,
+        };
+        WebSocketClient::listen_with(reader, manager).await;
+    }
+}
+
+// TODO: make it generic over message
+impl<M, Snapshot> MessageCallback<crate::binance::Message> for DepthManager<M, Snapshot>
+where
+    M: DepthCallback,
+    Snapshot: serde::de::DeserializeOwned,
+{
+    fn message_callback(&mut self, msg: Result<crate::binance::Message>) -> Result<()> {
+        Ok(())
+    }
 }
