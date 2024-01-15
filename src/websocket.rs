@@ -25,6 +25,7 @@ pub trait MessageCallback<T> {
 
 pub trait Wss: fmt::Display {
     fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String>;
+    fn to_enum(&self) -> Exchange;
 }
 
 #[derive(Default)]
