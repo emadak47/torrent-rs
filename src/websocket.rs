@@ -210,7 +210,10 @@ where
         let rest_client = crate::rest::RestClient::new(M::REST_URL);
         let depth_snapshot = match rest_client.get::<Snapshot, E, S>(endpoint, params).await {
             Ok(depth_snapshot) => depth_snapshot,
-            Err(e) => return, // TODO: handle error
+            Err(e) => {
+                println!("{}", TorrentError::BadRequest(e.to_string()));
+                return;
+            }
         };
         let manager = Self {
             user_manager: callback_manager,
