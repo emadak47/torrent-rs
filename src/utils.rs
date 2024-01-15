@@ -1,8 +1,10 @@
 use serde::{Deserialize, Deserializer};
-use std::fmt;
+use std::fmt::{self, Display};
+use std::result;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub type Result<T> = std::result::Result<T, TorrentError>;
+pub type Result<T> = result::Result<T, TorrentError>;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
@@ -12,7 +14,7 @@ pub enum Exchange {
     BINANCE,
 }
 
-impl fmt::Display for Exchange {
+impl Display for Exchange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Exchange::COINBASE => write!(f, "Coinbase"),
@@ -31,7 +33,7 @@ pub enum TorrentError {
     Unknown(String),
 }
 
-impl fmt::Display for TorrentError {
+impl Display for TorrentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TorrentError::BadStatus(v) => write!(f, "non-200 status code: {}", v),
@@ -57,10 +59,10 @@ enum StringOrNumeric {
     Numeric(f64),
 }
 
-pub fn from_str<'de, S, D>(deserializer: D) -> std::result::Result<S, D::Error>
+pub fn from_str<'de, S, D>(deserializer: D) -> result::Result<S, D::Error>
 where
-    S: std::str::FromStr + Default,
-    S::Err: fmt::Display,
+    S: FromStr + Default,
+    S::Err: Display,
     D: Deserializer<'de>,
 {
     let s: String = match Deserialize::deserialize(deserializer) {

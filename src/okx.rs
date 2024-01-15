@@ -1,8 +1,9 @@
-use crate::utils::{Result, TorrentError};
+use crate::utils::{Exchange, Result, TorrentError};
 use crate::websocket::{MessageCallback, Wss};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Display};
 use std::ops::Deref;
+use std::result;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -24,7 +25,7 @@ impl Deref for LevelUpdate {
 }
 
 impl<'de> Deserialize<'de> for LevelUpdate {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -41,7 +42,7 @@ impl<'de> serde::de::Visitor<'de> for LevelUpdateVisitor {
         formatter.write_str("Fixed-size array of 4 strings")
     }
 
-    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    fn visit_seq<A>(self, mut seq: A) -> result::Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -140,7 +141,7 @@ impl InstType {
     }
 }
 
-impl fmt::Display for InstType {
+impl Display for InstType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InstType::SPOT => write!(f, "SPOT"),
@@ -160,7 +161,7 @@ pub enum Channel {
     BOOKS,
 }
 
-impl fmt::Display for Channel {
+impl Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Channel::BOOKS => write!(f, "books"),
@@ -172,7 +173,7 @@ impl fmt::Display for Channel {
 #[derive(Default, Debug)]
 pub struct Okx;
 
-impl fmt::Display for Okx {
+impl Display for Okx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Okx")
     }
@@ -203,8 +204,8 @@ impl Wss for Okx {
         }
     }
 
-    fn to_enum(&self) -> crate::utils::Exchange {
-        crate::utils::Exchange::OKX
+    fn to_enum(&self) -> Exchange {
+        Exchange::OKX
     }
 }
 

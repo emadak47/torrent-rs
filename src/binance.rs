@@ -1,8 +1,9 @@
-use crate::utils::{Result, TorrentError};
+use crate::utils::{Exchange, Result, TorrentError};
 use crate::websocket::{MessageCallback, Wss};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Display};
 use std::ops::Deref;
+use std::result;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -23,7 +24,7 @@ impl Deref for LevelUpdate {
 }
 
 impl<'de> Deserialize<'de> for LevelUpdate {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -40,7 +41,7 @@ impl<'de> serde::de::Visitor<'de> for LevelUpdateVisitor {
         formatter.write_str("Fixed-size array of 2 strings")
     }
 
-    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    fn visit_seq<A>(self, mut seq: A) -> result::Result<Self::Value, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -98,7 +99,7 @@ pub enum Channel {
     DEPTH,
 }
 
-impl fmt::Display for Channel {
+impl Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Channel::DEPTH => write!(f, "depth"),
@@ -117,7 +118,7 @@ impl Binance {
     }
 }
 
-impl fmt::Display for Binance {
+impl Display for Binance {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Binance")
     }
@@ -149,8 +150,8 @@ impl Wss for Binance {
             Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
         }
     }
-    fn to_enum(&self) -> crate::utils::Exchange {
-        crate::utils::Exchange::BINANCE
+    fn to_enum(&self) -> Exchange {
+        Exchange::BINANCE
     }
 }
 
@@ -183,7 +184,7 @@ impl MessageCallback<Message> for Manager {
     }
 }
 
-impl fmt::Display for RequestError {
+impl Display for RequestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "code: {}, msg: {}", self.code, self.msg)
     }
