@@ -205,7 +205,7 @@ where
     Snapshot: serde::de::DeserializeOwned,
 {
     user_manager: M,
-    depth_snapshot: Snapshot,
+    depth_snapshot: Option<Snapshot>,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -235,7 +235,7 @@ where
         };
         let manager = Self {
             user_manager: callback_manager,
-            depth_snapshot,
+            depth_snapshot: Some(depth_snapshot),
             _marker: std::marker::PhantomData,
         };
         WebSocketClient::listen_with(reader, manager).await;
@@ -249,6 +249,12 @@ where
     T: std::fmt::Debug,
 {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()> {
+        if self.depth_snapshot.is_some() {
+            let snapshot = self.depth_snapshot.take();
+            self.user_manager.depth_callback(msg, snapshot);
+            return Ok(());
+        }
+        self.user_manager.depth_callback(msg, None);
         Ok(())
     }
 }
