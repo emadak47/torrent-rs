@@ -63,7 +63,7 @@ impl<'de> serde::de::Visitor<'de> for LevelUpdateVisitor {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscribeMessage {
-    pub result: String,
+    pub result: Option<String>,
     pub id: usize,
 }
 
