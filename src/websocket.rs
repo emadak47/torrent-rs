@@ -174,7 +174,7 @@ impl WebSocketClient {
                     for topic in topics {
                         let topic = topic.split('-').collect::<Vec<&str>>();
                         if topic.len() != 2 {
-                            println!("{} does't conform to X-Y format", topic.join(""));
+                            eprintln!("{} does't conform to X-Y format", topic.join(""));
                             continue;
                         }
                         let topic = topic.join("");
@@ -250,14 +250,14 @@ where
             {
                 Ok(depth_snapshot) => depth_snapshot,
                 Err(e) => {
-                    println!("{}", TorrentError::BadRequest(e.to_string()));
+                    eprintln!("{}", TorrentError::BadRequest(e.to_string()));
                     continue;
                 }
             };
             snapshots_mp.insert(symbol, depth_snapshot);
         }
         if snapshots_mp.is_empty() {
-            println!("All snapshot requests were unsuccessful");
+            eprintln!("All snapshot requests were unsuccessful");
             return;
         }
         let manager = Self {
