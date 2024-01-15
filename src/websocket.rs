@@ -156,21 +156,39 @@ impl WebSocketClient {
         T: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
         Snapshot: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
     {
-        let exchange = Exchange::BINANCE;
-        let channel = crate::binance::Channel::DEPTH.to_string();
-        let endpoint = crate::binance::API::Spot(crate::binance::Spot::Depth);
-        let params = [
-            ("symbol".to_string(), "BTCUSDT".to_string()),
-            ("limit".to_string(), "5000".to_string()),
-        ];
-        match self.subscribe(channel, topics).await {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        }
-        let listener = tokio::spawn(DepthManager::<M, Snapshot, T>::request_snapshot::<
-            [(String, String); 2],
-            E,
-        >(reader, endpoint, Some(params), callback_manager));
+        let listener = match &mut self.exchange {
+            Some(ex) => match ex.to_enum() {
+                Exchange::BINANCE => {
+                    let channel = crate::binance::Channel::DEPTH.to_string();
+                    let endpoint = crate::binance::API::Spot(crate::binance::Spot::Depth);
+                    match self.subscribe(channel, topics.clone()).await {
+                        Ok(_) => (),
+                        Err(err) => return Err(err),
+                    }
+                    let params = [
+                        ("symbol".to_string(), "BTCUSDT".to_string()),
+                        ("limit".to_string(), "5000".to_string()),
+                    ];
+                    tokio::spawn(DepthManager::<M, Snapshot, T>::request_snapshot::<
+                        [(String, String); 2],
+                        E,
+                    >(
+                        reader, endpoint, Some(params), callback_manager
+                    ))
+                }
+                _ => {
+                    return Err(TorrentError::BadRequest(format!(
+                        "Use `subscribe` method for depth orderbook subscription to {}",
+                        ex
+                    )))
+                }
+            },
+            None => {
+                return Err(TorrentError::BadParse(
+                    "Not connected to exchange".to_string(),
+                ))
+            }
+        };
         Ok(listener)
     }
 }
