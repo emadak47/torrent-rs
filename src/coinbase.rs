@@ -199,6 +199,9 @@ impl Wss for Coinbase {
             Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
         }
     }
+    fn to_enum(&self) -> crate::utils::Exchange {
+        crate::utils::Exchange::COINBASE
+    }
 }
 
 pub struct Manager;

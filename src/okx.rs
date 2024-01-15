@@ -202,6 +202,10 @@ impl Wss for Okx {
             Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
         }
     }
+
+    fn to_enum(&self) -> crate::utils::Exchange {
+        crate::utils::Exchange::OKX
+    }
 }
 
 pub struct Manager;
