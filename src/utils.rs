@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Result<T> = result::Result<T, TorrentError>;
+pub type Symbol = String;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug)]

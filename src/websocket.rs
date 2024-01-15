@@ -2,12 +2,13 @@ use crate::binance::{Binance, Channel, Spot, API};
 use crate::coinbase::Coinbase;
 use crate::okx::Okx;
 use crate::rest::RestClient;
-use crate::utils::{Exchange, Result, TorrentError};
+use crate::utils::{Exchange, Result, Symbol, TorrentError};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
 use serde::{de::DeserializeOwned, Serialize};
+use std::collections::HashMap;
 use std::env;
 use std::fmt::{Debug, Display};
 use std::marker;
@@ -169,7 +170,7 @@ impl WebSocketClient {
                         Ok(_) => (),
                         Err(err) => return Err(err),
                     }
-                    let mut params: Vec<[(String, String); 2]> = vec![];
+                    let mut params: HashMap<Symbol, [(String, String); 2]> = HashMap::new();
                     for topic in topics {
                         let topic = topic.split('-').collect::<Vec<&str>>();
                         if topic.len() != 2 {
@@ -178,10 +179,10 @@ impl WebSocketClient {
                         }
                         let topic = topic.join("");
                         let param = [
-                            ("symbol".to_string(), topic),
+                            ("symbol".to_string(), topic.clone()),
                             ("limit".to_string(), "5000".to_string()),
                         ];
-                        params.push(param);
+                        params.insert(topic, param);
                     }
                     tokio::spawn(DepthManager::<M, Snapshot, T>::request_snapshot::<
                         [(String, String); 2],
@@ -210,7 +211,7 @@ impl WebSocketClient {
 pub trait DepthCallback<T, Snapshot> {
     const REST_URL: &'static str;
 
-    fn depth_callback(&mut self, msg: Result<T>, snapshot: Option<Vec<Snapshot>>);
+    fn depth_callback(&mut self, msg: Result<T>, snapshots_mp: Option<HashMap<Symbol, Snapshot>>);
 }
 
 pub struct DepthManager<M, Snapshot, T>
@@ -219,7 +220,7 @@ where
     Snapshot: DeserializeOwned,
 {
     user_manager: M,
-    snapshots: Option<Vec<Snapshot>>,
+    snapshots_mp: Option<HashMap<Symbol, Snapshot>>,
     _marker: marker::PhantomData<T>,
 }
 
@@ -231,7 +232,7 @@ where
     pub async fn request_snapshot<S, E>(
         reader: SocketReader,
         endpoint: impl Into<String>,
-        params: Vec<S>,
+        params: HashMap<Symbol, S>,
         callback_manager: M,
     ) where
         M: DepthCallback<T, Snapshot>,
@@ -241,8 +242,8 @@ where
     {
         let rest_client = RestClient::new(M::REST_URL);
         let endpoint = endpoint.into();
-        let mut snapshots: Vec<Snapshot> = vec![];
-        for param in params {
+        let mut snapshots_mp: HashMap<Symbol, Snapshot> = HashMap::new();
+        for (symbol, param) in params {
             let depth_snapshot = match rest_client
                 .get::<Snapshot, E, S>(&endpoint, Some(param))
                 .await
@@ -253,15 +254,15 @@ where
                     continue;
                 }
             };
-            snapshots.push(depth_snapshot);
+            snapshots_mp.insert(symbol, depth_snapshot);
         }
-        if snapshots.is_empty() {
+        if snapshots_mp.is_empty() {
             println!("All snapshot requests were unsuccessful");
             return;
         }
         let manager = Self {
             user_manager: callback_manager,
-            snapshots: Some(snapshots),
+            snapshots_mp: Some(snapshots_mp),
             _marker: marker::PhantomData,
         };
         WebSocketClient::listen_with(reader, manager).await;
@@ -275,9 +276,9 @@ where
     T: Debug,
 {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()> {
-        if self.snapshots.is_some() {
-            let snapshot = self.snapshots.take();
-            self.user_manager.depth_callback(msg, snapshot);
+        if self.snapshots_mp.is_some() {
+            let snapshots_mp = self.snapshots_mp.take();
+            self.user_manager.depth_callback(msg, snapshots_mp);
             return Ok(());
         }
         self.user_manager.depth_callback(msg, None);
