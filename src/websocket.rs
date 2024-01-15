@@ -144,16 +144,17 @@ impl WebSocketClient {
         read_fut.await
     }
 
-    pub async fn depth_subscribe<M, E, T>(
+    pub async fn depth_subscribe<M, E, T, Snapshot>(
         &mut self,
         reader: SocketReader,
         topics: Vec<String>,
         callback_manager: M,
     ) -> Result<tokio::task::JoinHandle<()>>
     where
-        M: DepthCallback<T> + Send + 'static,
+        M: DepthCallback<T, Snapshot> + Send + 'static,
         E: std::fmt::Display + serde::de::DeserializeOwned + 'static,
         T: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
+        Snapshot: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
     {
         let exchange = Exchange::BINANCE;
         let channel = crate::binance::Channel::DEPTH.to_string();
@@ -162,33 +163,27 @@ impl WebSocketClient {
             ("symbol".to_string(), "BTCUSDT".to_string()),
             ("limit".to_string(), "5000".to_string()),
         ];
-        let reader = match self.connect(exchange).await {
-            Ok(reader) => reader,
-            Err(err) => return Err(err),
-        };
         match self.subscribe(channel, topics).await {
             Ok(_) => (),
             Err(err) => return Err(err),
         }
-        let listener = tokio::spawn(
-            DepthManager::<M, crate::binance::DepthSnapshot, T>::request_snapshot::<
-                [(String, String); 2],
-                E,
-            >(reader, endpoint, Some(params), callback_manager),
-        );
+        let listener = tokio::spawn(DepthManager::<M, Snapshot, T>::request_snapshot::<
+            [(String, String); 2],
+            E,
+        >(reader, endpoint, Some(params), callback_manager));
         Ok(listener)
     }
 }
 
-pub trait DepthCallback<T> {
+pub trait DepthCallback<T, Snapshot> {
     const REST_URL: &'static str;
 
-    fn depth_callback(&mut self, msg: Result<T>);
+    fn depth_callback(&mut self, msg: Result<T>, snapshot: Option<Snapshot>);
 }
 
 pub struct DepthManager<M, Snapshot, T>
 where
-    M: DepthCallback<T>,
+    M: DepthCallback<T, Snapshot>,
     Snapshot: serde::de::DeserializeOwned,
 {
     user_manager: M,
@@ -198,7 +193,7 @@ where
 
 impl<M, Snapshot, T> DepthManager<M, Snapshot, T>
 where
-    M: DepthCallback<T>,
+    M: DepthCallback<T, Snapshot>,
     Snapshot: serde::de::DeserializeOwned + std::fmt::Debug,
 {
     pub async fn request_snapshot<S, E>(
@@ -207,7 +202,7 @@ where
         params: Option<S>,
         callback_manager: M,
     ) where
-        M: DepthCallback<T>,
+        M: DepthCallback<T, Snapshot>,
         T: std::fmt::Debug + serde::de::DeserializeOwned,
         S: serde::Serialize + std::fmt::Debug,
         E: std::fmt::Display + serde::de::DeserializeOwned,
@@ -228,7 +223,7 @@ where
 
 impl<M, Snapshot, T> MessageCallback<T> for DepthManager<M, Snapshot, T>
 where
-    M: DepthCallback<T>,
+    M: DepthCallback<T, Snapshot>,
     Snapshot: serde::de::DeserializeOwned,
     T: std::fmt::Debug,
 {
