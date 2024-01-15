@@ -169,15 +169,25 @@ impl WebSocketClient {
                         Ok(_) => (),
                         Err(err) => return Err(err),
                     }
-                    let params = [
-                        ("symbol".to_string(), "BTCUSDT".to_string()),
-                        ("limit".to_string(), "5000".to_string()),
-                    ];
+                    let mut params: Vec<[(String, String); 2]> = vec![];
+                    for topic in topics {
+                        let topic = topic.split('-').collect::<Vec<&str>>();
+                        if topic.len() != 2 {
+                            println!("{} does't conform to X-Y format", topic.join(""));
+                            continue;
+                        }
+                        let topic = topic.join("");
+                        let param = [
+                            ("symbol".to_string(), topic),
+                            ("limit".to_string(), "5000".to_string()),
+                        ];
+                        params.push(param);
+                    }
                     tokio::spawn(DepthManager::<M, Snapshot, T>::request_snapshot::<
                         [(String, String); 2],
                         E,
                     >(
-                        reader, endpoint, Some(params), callback_manager
+                        reader, endpoint, params, callback_manager
                     ))
                 }
                 _ => {
@@ -200,7 +210,7 @@ impl WebSocketClient {
 pub trait DepthCallback<T, Snapshot> {
     const REST_URL: &'static str;
 
-    fn depth_callback(&mut self, msg: Result<T>, snapshot: Option<Snapshot>);
+    fn depth_callback(&mut self, msg: Result<T>, snapshot: Option<Vec<Snapshot>>);
 }
 
 pub struct DepthManager<M, Snapshot, T>
@@ -209,7 +219,7 @@ where
     Snapshot: DeserializeOwned,
 {
     user_manager: M,
-    depth_snapshot: Option<Snapshot>,
+    snapshots: Option<Vec<Snapshot>>,
     _marker: marker::PhantomData<T>,
 }
 
@@ -221,7 +231,7 @@ where
     pub async fn request_snapshot<S, E>(
         reader: SocketReader,
         endpoint: impl Into<String>,
-        params: Option<S>,
+        params: Vec<S>,
         callback_manager: M,
     ) where
         M: DepthCallback<T, Snapshot>,
@@ -230,16 +240,28 @@ where
         E: Display + DeserializeOwned,
     {
         let rest_client = RestClient::new(M::REST_URL);
-        let depth_snapshot = match rest_client.get::<Snapshot, E, S>(endpoint, params).await {
-            Ok(depth_snapshot) => depth_snapshot,
-            Err(e) => {
-                println!("{}", TorrentError::BadRequest(e.to_string()));
-                return;
-            }
-        };
+        let endpoint = endpoint.into();
+        let mut snapshots: Vec<Snapshot> = vec![];
+        for param in params {
+            let depth_snapshot = match rest_client
+                .get::<Snapshot, E, S>(&endpoint, Some(param))
+                .await
+            {
+                Ok(depth_snapshot) => depth_snapshot,
+                Err(e) => {
+                    println!("{}", TorrentError::BadRequest(e.to_string()));
+                    continue;
+                }
+            };
+            snapshots.push(depth_snapshot);
+        }
+        if snapshots.is_empty() {
+            println!("All snapshot requests were unsuccessful");
+            return;
+        }
         let manager = Self {
             user_manager: callback_manager,
-            depth_snapshot: Some(depth_snapshot),
+            snapshots: Some(snapshots),
             _marker: marker::PhantomData,
         };
         WebSocketClient::listen_with(reader, manager).await;
@@ -253,8 +275,8 @@ where
     T: Debug,
 {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()> {
-        if self.depth_snapshot.is_some() {
-            let snapshot = self.depth_snapshot.take();
+        if self.snapshots.is_some() {
+            let snapshot = self.snapshots.take();
             self.user_manager.depth_callback(msg, snapshot);
             return Ok(());
         }
