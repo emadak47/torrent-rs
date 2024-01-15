@@ -1,8 +1,8 @@
-use crate::utils::{from_str, now, Result, TorrentError};
+use crate::utils::{from_str, now, Exchange, Result, TorrentError};
 use crate::websocket::{MessageCallback, Wss};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{self, Display};
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -111,7 +111,7 @@ pub enum Channel {
     HEARTBEATS,
 }
 
-impl fmt::Display for Channel {
+impl Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Channel::HEARTBEATS => write!(f, "heartbeats"),
@@ -127,7 +127,7 @@ pub struct Coinbase {
     is_legacy: bool,
 }
 
-impl fmt::Display for Coinbase {
+impl Display for Coinbase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Coinbase")
     }
@@ -199,8 +199,8 @@ impl Wss for Coinbase {
             Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
         }
     }
-    fn to_enum(&self) -> crate::utils::Exchange {
-        crate::utils::Exchange::COINBASE
+    fn to_enum(&self) -> Exchange {
+        Exchange::COINBASE
     }
 }
 

@@ -1,12 +1,16 @@
-use crate::binance::Binance;
+use crate::binance::{Binance, Channel, Spot, API};
 use crate::coinbase::Coinbase;
 use crate::okx::Okx;
+use crate::rest::RestClient;
 use crate::utils::{Exchange, Result, TorrentError};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use std::fmt;
+use serde::{de::DeserializeOwned, Serialize};
+use std::env;
+use std::fmt::{Debug, Display};
+use std::marker;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -23,7 +27,7 @@ pub trait MessageCallback<T> {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()>;
 }
 
-pub trait Wss: fmt::Display {
+pub trait Wss: Display {
     fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String>;
     fn to_enum(&self) -> Exchange;
 }
@@ -72,8 +76,8 @@ impl WebSocketClient {
 
         match exchange {
             Exchange::COINBASE => {
-                let key_name = std::env::var("KEY_NAME").unwrap_or_default();
-                let private_key = std::env::var("PRIVATE_KEY").unwrap_or_default();
+                let key_name = env::var("KEY_NAME").unwrap_or_default();
+                let private_key = env::var("PRIVATE_KEY").unwrap_or_default();
                 if key_name.is_empty() || private_key.is_empty() {
                     panic!("Coinbase credentails uninitalised. See `.env.example`");
                 }
@@ -120,7 +124,7 @@ impl WebSocketClient {
     pub async fn listen_with<T, M>(reader: SocketReader, callback_manager: M)
     where
         M: MessageCallback<T>,
-        T: serde::de::DeserializeOwned,
+        T: DeserializeOwned,
     {
         let mut manager: M = callback_manager;
 
@@ -152,15 +156,15 @@ impl WebSocketClient {
     ) -> Result<tokio::task::JoinHandle<()>>
     where
         M: DepthCallback<T, Snapshot> + Send + 'static,
-        E: std::fmt::Display + serde::de::DeserializeOwned + 'static,
-        T: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
-        Snapshot: std::fmt::Debug + serde::de::DeserializeOwned + 'static + std::marker::Send,
+        E: Display + DeserializeOwned + 'static,
+        T: Debug + DeserializeOwned + 'static + marker::Send,
+        Snapshot: Debug + DeserializeOwned + 'static + marker::Send,
     {
         let listener = match &mut self.exchange {
             Some(ex) => match ex.to_enum() {
                 Exchange::BINANCE => {
-                    let channel = crate::binance::Channel::DEPTH.to_string();
-                    let endpoint = crate::binance::API::Spot(crate::binance::Spot::Depth);
+                    let channel = Channel::DEPTH.to_string();
+                    let endpoint = API::Spot(Spot::Depth);
                     match self.subscribe(channel, topics.clone()).await {
                         Ok(_) => (),
                         Err(err) => return Err(err),
@@ -202,17 +206,17 @@ pub trait DepthCallback<T, Snapshot> {
 pub struct DepthManager<M, Snapshot, T>
 where
     M: DepthCallback<T, Snapshot>,
-    Snapshot: serde::de::DeserializeOwned,
+    Snapshot: DeserializeOwned,
 {
     user_manager: M,
     depth_snapshot: Option<Snapshot>,
-    _marker: std::marker::PhantomData<T>,
+    _marker: marker::PhantomData<T>,
 }
 
 impl<M, Snapshot, T> DepthManager<M, Snapshot, T>
 where
     M: DepthCallback<T, Snapshot>,
-    Snapshot: serde::de::DeserializeOwned + std::fmt::Debug,
+    Snapshot: DeserializeOwned + Debug,
 {
     pub async fn request_snapshot<S, E>(
         reader: SocketReader,
@@ -221,11 +225,11 @@ where
         callback_manager: M,
     ) where
         M: DepthCallback<T, Snapshot>,
-        T: std::fmt::Debug + serde::de::DeserializeOwned,
-        S: serde::Serialize + std::fmt::Debug,
-        E: std::fmt::Display + serde::de::DeserializeOwned,
+        T: Debug + DeserializeOwned,
+        S: Debug + Serialize,
+        E: Display + DeserializeOwned,
     {
-        let rest_client = crate::rest::RestClient::new(M::REST_URL);
+        let rest_client = RestClient::new(M::REST_URL);
         let depth_snapshot = match rest_client.get::<Snapshot, E, S>(endpoint, params).await {
             Ok(depth_snapshot) => depth_snapshot,
             Err(e) => {
@@ -236,7 +240,7 @@ where
         let manager = Self {
             user_manager: callback_manager,
             depth_snapshot: Some(depth_snapshot),
-            _marker: std::marker::PhantomData,
+            _marker: marker::PhantomData,
         };
         WebSocketClient::listen_with(reader, manager).await;
     }
@@ -245,8 +249,8 @@ where
 impl<M, Snapshot, T> MessageCallback<T> for DepthManager<M, Snapshot, T>
 where
     M: DepthCallback<T, Snapshot>,
-    Snapshot: serde::de::DeserializeOwned,
-    T: std::fmt::Debug,
+    Snapshot: DeserializeOwned,
+    T: Debug,
 {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()> {
         if self.depth_snapshot.is_some() {
