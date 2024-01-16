@@ -370,7 +370,7 @@ impl Transmitor<Vec<LevelUpdate>> for Manager {
             let event = make_update_event(bids, asks, ccy_pair, Exchange::BINANCE)
                 .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
             let encoding = Encoding::APP_CUSTOM
-                .with_suffix("snapshot_event")
+                .with_suffix("update_event")
                 .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
             (event, encoding)
         };
