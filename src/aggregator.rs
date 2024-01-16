@@ -9,12 +9,10 @@ use crate::flatbuffer::{
 };
 use crate::orderbook::l2::Level;
 use crate::spsc::Producer;
-use crate::utils::{CcyPair, FlatbufferEvent, Symbol};
+use crate::utils::{CcyPair, FlatbufferEvent, Result, Symbol, TorrentError};
 use flatbuffers::Vector;
-use std::{
-    collections::{BTreeMap, HashMap},
-    ops::Div,
-};
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Div;
 
 type Exchange = String;
 type ExchangeQty = u64;
@@ -27,21 +25,16 @@ where
 {
     fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair>;
     fn standardise_updates(&self, updates: U) -> Vec<Level>;
-    fn transmit(
-        &self,
-        symbol: Symbol,
-        bids: U,
-        asks: U,
-        is_snapshot: bool,
-    ) -> crate::utils::Result<()>;
+    fn transmit(&self, symbol: Symbol, bids: U, asks: U, is_snapshot: bool) -> Result<()>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ZenohEvent {
     pub stream_id: u8,
     pub buff: Vec<u8>,
 }
 
+#[derive(Default)]
 struct Metadata {
     total_qty: u64,
     ex_qty_mp: HashMap<Exchange, ExchangeQty>,
@@ -49,10 +42,7 @@ struct Metadata {
 
 impl Metadata {
     fn new() -> Self {
-        Metadata {
-            total_qty: 0,
-            ex_qty_mp: HashMap::new(),
-        }
+        Default::default()
     }
 }
 
@@ -64,15 +54,12 @@ pub struct Book {
 
 impl Book {
     pub fn new() -> Self {
-        Book {
-            bid_book: BookSide::new(),
-            ask_book: BookSide::new(),
-        }
+        Default::default()
     }
 }
 
 /// Holds and maintains an aggregated orderbook for a number of symbols.
-/// Sends [`PricingEvent`] to an external service as a [`FlatbufferEvent`]
+/// Sends data to external services as a [`FlatbufferEvent`]
 pub struct Aggregator {
     /// holds all symbols and their corresponding aggregated orderbook
     books: HashMap<Symbol, Book>,
@@ -91,21 +78,21 @@ impl Aggregator {
         }
     }
 
-    /// clears the orderbook for the supplied `exchange` and `instrument`
+    /// clears the orderbook for the supplied `exchange` and `symbol`
     /// and appends new `bids` and `asks`
     fn reset(
         &mut self,
-        instrument: &str,
+        symbol: &str,
         exchange: &str,
         bids: Vector<SnapshotBidData>,
         asks: Vector<SnapshotAskData>,
-    ) -> Result<(), failure::Error> {
-        log::info!("Snapshot event: Exchange `{exchange}` | Symbol `{instrument}`");
+    ) -> Result<()> {
+        println!("Snapshot event: `{exchange}` | `{symbol}`");
 
         let mut bids_to_remove = Vec::new();
         let mut asks_to_remove = Vec::new();
 
-        if let Some(book) = self.books.get_mut(instrument) {
+        if let Some(book) = self.books.get_mut(symbol) {
             for (price, metadata) in book.bid_book.iter_mut() {
                 if let Some(qty) = metadata.ex_qty_mp.get_mut(exchange) {
                     if *qty != 0 {
@@ -130,14 +117,14 @@ impl Aggregator {
                 }
             }
         } else {
-            self.books.insert(instrument.to_string(), Book::new());
+            self.books.insert(symbol.to_string(), Book::new());
         }
 
         // remove price levels with total qty 0
         if !asks_to_remove.is_empty() || !bids_to_remove.is_empty() {
             let book = self
                 .books
-                .get_mut(instrument)
+                .get_mut(symbol)
                 .expect("len must be 0 if book didn't exist");
             for a in asks_to_remove {
                 book.ask_book.remove(&a);
@@ -149,7 +136,7 @@ impl Aggregator {
 
         let book = self
             .books
-            .get_mut(instrument)
+            .get_mut(symbol)
             .expect("book must haved existed or just been inserted");
 
         // insert bids
@@ -191,24 +178,23 @@ impl Aggregator {
         Ok(())
     }
 
-    /// update the orderbook for the supplied `exchange` and `instrument`
+    /// update the orderbook for the supplied `exchange` and `symbol`
     /// with data in `bids` and `asks`
     fn update(
         &mut self,
-        instrument: &str,
+        symbol: &str,
         exchange: &str,
         bids: Vector<UpdateBidData>,
         asks: Vector<UpdateAskData>,
-    ) -> Result<(), failure::Error> {
-        log::info!("Update event: Exchange `{exchange}` | Symbol `{instrument}`");
+    ) -> Result<()> {
+        log::info!("Update event: `{exchange}` | `{symbol}`");
 
         let mut bids_to_remove = Vec::new();
         let mut asks_to_remove = Vec::new();
 
-        let book = self
-            .books
-            .get_mut(instrument)
-            .ok_or_else(|| failure::err_msg("book must haved existed or just been inserted"))?;
+        let book = self.books.get_mut(symbol).ok_or_else(|| {
+            TorrentError::Unknown("book must haved existed or just been inserted".to_string())
+        })?;
 
         for bid in bids {
             let price = bid.price();
@@ -277,34 +263,35 @@ impl Aggregator {
     ///   - stream id 0 corresponds to a snapshot event (i.e. triggers reset)
     ///   - stream id 1 corresponds to an update event (i.e. triggers update)
     ///   - stream id 2 corresponds to a pricing event
-    pub fn process(&mut self, data: ZenohEvent) -> Result<(), failure::Error> {
+    pub fn process(&mut self, data: ZenohEvent) -> Result<()> {
         match data.stream_id {
             0 => {
                 // snapshot
-                // if the instrument and exchange are parsed successfully, and bids and asks aren't,
+                // if the symbol and exchange are parsed successfully, and bids and asks aren't,
                 // then we can just clear the bid and ask books without inserting a snapshot (i.e. insert empty bids & asks)
                 // This just means that our aggregated orderbook will not have any of that particular exchange's levels,
                 // which prevents it having an incorrect state at any point in time.
-                let event = root_as_snapshot_event_message(&data.buff)?
+                let event = root_as_snapshot_event_message(&data.buff)
+                    .map_err(|e| TorrentError::BadParse(format!("Invalid buffer: {}", e)))?
                     .snapshot_event()
                     .ok_or_else(|| {
                         self.in_sync = false;
-                        failure::err_msg("failed to parse snapshot event")
+                        TorrentError::BadParse("Snapshot event".to_string())
                     })?;
-                let instrument = event.instrument().ok_or_else(|| {
+                let symbol = event.instrument().ok_or_else(|| {
                     self.in_sync = false;
-                    failure::err_msg("failed to parse instrument")
+                    TorrentError::BadParse("Snapshot symbol".to_string())
                 })?;
                 let exchange = event.exchange().ok_or_else(|| {
                     self.in_sync = false;
-                    failure::err_msg("failed to parse exchange")
+                    TorrentError::BadParse("Snapshot exchange".to_string())
                 })?;
                 let data = event
                     .snapshot()
-                    .ok_or_else(|| failure::err_msg("failed to parse snapshot data"));
+                    .ok_or_else(|| TorrentError::BadParse("Snapshot data".to_string()));
                 let (bids, asks) = data.map_or_else(
                     |e| {
-                        log::error!("{e}");
+                        eprintln!("{e}");
                         (Vector::default(), Vector::default())
                     },
                     |data| {
@@ -314,44 +301,49 @@ impl Aggregator {
                     },
                 );
 
-                self.reset(instrument, exchange, bids, asks)?;
+                self.reset(symbol, exchange, bids, asks)?;
             }
             1 => {
                 // update
-                // if instrument, exchange, bids, or asks are parsed unsucessfully, then the whole update
+                // if symbol, exchange, bids, or asks are parsed unsucessfully, then the whole update
                 // will be dissmised. Thus, the aggregator will have an out of sync state
-                let event = root_as_update_event_message(&data.buff)?
+                let event = root_as_update_event_message(&data.buff)
+                    .map_err(|e| TorrentError::BadParse(format!("Invalid buffer: {}", e)))?
                     .update_event()
                     .ok_or_else(|| {
                         self.in_sync = false;
-                        failure::err_msg("failed to parse update event")
+                        TorrentError::BadParse("Update event".to_string())
                     })?;
-                let instrument = event.instrument().ok_or_else(|| {
+                let symbol = event.instrument().ok_or_else(|| {
                     self.in_sync = false;
-                    failure::err_msg("failed to parse instrument")
+                    TorrentError::BadParse("Update symbol".to_string())
                 })?;
                 let exchange = event.exchange().ok_or_else(|| {
                     self.in_sync = false;
-                    failure::err_msg("failed to parse instrument")
+                    TorrentError::BadParse("Update exchange".to_string())
                 })?;
                 let data = event
                     .update()
-                    .ok_or_else(|| failure::err_msg("failed to parse update data"))?;
+                    .ok_or_else(|| TorrentError::BadParse("Update data".to_string()))?;
 
                 let bids = data
                     .bids()
-                    .ok_or_else(|| failure::err_msg("failed to parse bids for update"))?;
+                    .ok_or_else(|| TorrentError::BadParse("bid updates".to_string()))?;
                 let asks = data
                     .asks()
-                    .ok_or_else(|| failure::err_msg("failed to parse asks for update"))?;
+                    .ok_or_else(|| TorrentError::BadParse("ask updates".to_string()))?;
 
-                self.update(instrument, exchange, bids, asks)?;
+                self.update(symbol, exchange, bids, asks)?;
             }
             2 => {
                 // Pricing Details
                 self.make_snapshot_event("BTC-USDT-spot");
             }
-            _ => return Err(failure::err_msg("unexpected stream id event")),
+            _ => {
+                return Err(TorrentError::Unknown(
+                    "unexpected stream id event".to_string(),
+                ))
+            }
         }
 
         Ok(())
@@ -366,39 +358,39 @@ impl Aggregator {
         self.books.keys().collect::<Vec<&String>>()
     }
 
-    /// Returns all bid price levels for the given `instrument` if it exists.
-    pub fn list_bid_levels<'a>(&self, instrument: impl Into<&'a str>) -> Option<Vec<&u64>> {
-        let book = self.books.get(instrument.into())?;
+    /// Returns all bid price levels for the given `` if it exists.
+    pub fn list_bid_levels<'a>(&self, symbol: impl Into<&'a str>) -> Option<Vec<&u64>> {
+        let book = self.books.get(symbol.into())?;
         let bid_levels = book.bid_book.keys().rev().collect::<Vec<&u64>>();
         Some(bid_levels)
     }
 
-    /// Returns all ask price levels for the given `instrument` if it exists.
-    pub fn list_ask_levels<'a>(&self, instrument: impl Into<&'a str>) -> Option<Vec<&u64>> {
-        let book = self.books.get(instrument.into())?;
+    /// Returns all ask price levels for the given `symbol` if it exists.
+    pub fn list_ask_levels<'a>(&self, symbol: impl Into<&'a str>) -> Option<Vec<&u64>> {
+        let book = self.books.get(symbol.into())?;
         let ask_levels = book.ask_book.keys().collect::<Vec<&u64>>();
         Some(ask_levels)
     }
 
-    /// Returns best bid price for the given `instrument` if it exists.
-    pub fn get_best_bid<'a>(&self, instrument: impl Into<&'a str>) -> Option<u64> {
-        let book = self.books.get(instrument.into())?;
+    /// Returns best bid price for the given `symbol` if it exists.
+    pub fn get_best_bid<'a>(&self, symbol: impl Into<&'a str>) -> Option<u64> {
+        let book = self.books.get(symbol.into())?;
         let best_bid = book.bid_book.last_key_value()?;
         Some(*best_bid.0)
     }
 
-    /// Returns best ask price for the given `instrument` if it exists.
-    pub fn get_best_ask<'a>(&self, instrument: impl Into<&'a str>) -> Option<u64> {
-        let book = self.books.get(instrument.into())?;
+    /// Returns best ask price for the given `symbol` if it exists.
+    pub fn get_best_ask<'a>(&self, symbol: impl Into<&'a str>) -> Option<u64> {
+        let book = self.books.get(symbol.into())?;
         let best_ask = book.ask_book.first_key_value()?;
         Some(*best_ask.0)
     }
 
-    /// Returns mid price for the given `instrument` if it exists.
-    pub fn get_mid_price<'a>(&self, instrument: impl Into<&'a str>) -> Option<u64> {
-        let instrument = instrument.into();
-        let best_bid = self.get_best_bid(instrument)?;
-        let best_ask = self.get_best_ask(instrument)?;
+    /// Returns mid price for the given `symbol` if it exists.
+    pub fn get_mid_price<'a>(&self, symbol: impl Into<&'a str>) -> Option<u64> {
+        let symbol = symbol.into();
+        let best_bid = self.get_best_bid(symbol)?;
+        let best_ask = self.get_best_ask(symbol)?;
         let spread = best_bid.checked_add(best_ask)?;
         Some(spread.div(2))
     }
@@ -409,12 +401,12 @@ impl Aggregator {
     /// sizes in the bid orderbook have to be scaled down to avoid overflowing.
     pub fn get_execution_bid<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         qty: impl Into<f64>,
     ) -> Option<u64> {
         let qty_f64 = Into::<f64>::into(qty);
-        let instrument = instrument.into();
-        let book = self.books.get(instrument)?;
+        let symbol = symbol.into();
+        let book = self.books.get(symbol)?;
 
         let multiplier = 1e10;
 
@@ -447,12 +439,12 @@ impl Aggregator {
     /// sizes in the ask orderbook have to be scaled down to avoid overflowing.
     pub fn get_execution_ask<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         qty: impl Into<f64>,
     ) -> Option<u64> {
         let qty_f64 = Into::<f64>::into(qty);
-        let instrument = instrument.into();
-        let book = self.books.get(instrument)?;
+        let symbol = symbol.into();
+        let book = self.books.get(symbol)?;
 
         let multiplier = 1e10;
 
@@ -480,21 +472,21 @@ impl Aggregator {
         Some((avg_price.div(qty_f64) * multiplier) as u64)
     }
 
-    /// Returns the total bid liquidity in the orderbook of the given `instrument`
+    /// Returns the total bid liquidity in the orderbook of the given `symbol`
     /// up to the number of `bps` away from mid price
     /// # Arguments
     ///
-    /// * `instrument` - the symbol for which liquidity will be retrieved
+    /// * `symbol` - the symbol for which liquidity will be retrieved
     /// * `bps` - a whole number of basis points below mid price (i.e. mid_price * (1 - 0.0001 * bps)
     pub fn get_bid_qty_till<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         bps: impl Into<f64>,
     ) -> Option<u64> {
-        let instrument = instrument.into();
+        let symbol = symbol.into();
         let bps: f64 = bps.into();
-        let book = self.books.get(instrument)?;
-        let mid_price = self.get_mid_price(instrument)?;
+        let book = self.books.get(symbol)?;
+        let mid_price = self.get_mid_price(symbol)?;
         let factor = (1.0_f64) - (bps / 10000_f64);
         let stoppage_price = (mid_price as f64 * factor) as u64;
         let cum_qty = book
@@ -508,21 +500,21 @@ impl Aggregator {
         Some(cum_qty)
     }
 
-    /// Returns the total ask liquidity in the orderbook of the given `instrument`
+    /// Returns the total ask liquidity in the orderbook of the given `symbol`
     /// up to the number of `bps` away from mid price
     /// # Arguments
     ///
-    /// * `instrument` - the symbol for which liquidity will be retrieved
+    /// * `symbol` - the symbol for which liquidity will be retrieved
     /// * `bps` - a whole number of basis points above mid price (i.e. mid_price * (1 + 0.0001 * bps)
     pub fn get_ask_qty_till<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         bps: impl Into<f64>,
     ) -> Option<u64> {
-        let instrument = instrument.into();
+        let symbol = symbol.into();
         let bps: f64 = bps.into();
-        let book = self.books.get(instrument)?;
-        let mid_price = self.get_mid_price(instrument)?;
+        let book = self.books.get(symbol)?;
+        let mid_price = self.get_mid_price(symbol)?;
         let factor = (1.0_f64) + (bps / 10000_f64);
         let stoppage_price = (mid_price as f64 * factor) as u64;
         let cum_qty = book
@@ -535,32 +527,32 @@ impl Aggregator {
         Some(cum_qty)
     }
 
-    /// Returns the total bid liquidity in the orderbook of the given `instrument`
+    /// Returns the total bid liquidity in the orderbook of the given `symbol`
     /// for the given `price` level
     pub fn get_bid_liquidity<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         price: impl Into<f64>,
     ) -> Option<u64> {
-        let instrument = instrument.into();
+        let symbol = symbol.into();
         let price = price.into();
         let multiplier = 1e10;
-        let book = self.books.get(instrument)?;
+        let book = self.books.get(symbol)?;
         let meta = book.bid_book.get(&((price * multiplier) as u64))?;
         Some(meta.total_qty)
     }
 
-    /// Returns the total ask liquidity in the orderbook of the given `instrument`
+    /// Returns the total ask liquidity in the orderbook of the given `symbol`
     /// for the given `price` level
     pub fn get_ask_liquidity<'a>(
         &self,
-        instrument: impl Into<&'a str>,
+        symbol: impl Into<&'a str>,
         price: impl Into<f64>,
     ) -> Option<u64> {
-        let instrument = instrument.into();
+        let symbol = symbol.into();
         let price = price.into();
         let multiplier = 1e10;
-        let book = self.books.get(instrument)?;
+        let book = self.books.get(symbol)?;
         let meta = book.ask_book.get(&((price * multiplier) as u64))?;
         Some(meta.total_qty)
     }
@@ -571,18 +563,18 @@ impl Aggregator {
      ************************************************************
      */
 
-    fn make_snapshot_event(&mut self, instrument: &str) {
+    fn make_snapshot_event(&mut self, symbol: &str) {
         let mut bids_flat: Vec<Level> = Vec::new();
         let mut asks_flat: Vec<Level> = Vec::new();
 
-        if let Some(book) = self.books.get_mut(instrument) {
+        if let Some(book) = self.books.get_mut(symbol) {
             for (price, metadata) in book.bid_book.iter().rev() {
                 bids_flat.push(Level::new(*price, metadata.total_qty));
             }
             for (price, metadata) in book.ask_book.iter() {
                 asks_flat.push(Level::new(*price, metadata.total_qty));
             }
-            let event = make_snapshot_aggregator(bids_flat, asks_flat, instrument);
+            let event = make_snapshot_aggregator(bids_flat, asks_flat, symbol);
             if event.is_ok() {
                 if self.in_sync {
                     self.q.push(event.unwrap());
