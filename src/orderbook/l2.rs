@@ -1,6 +1,10 @@
-use crate::common::Side;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
+
+enum Side {
+    BUY,
+    SELL,
+}
 
 /// Defines an ordebook's L2 level
 #[derive(Debug, Clone, PartialEq, Eq)]
