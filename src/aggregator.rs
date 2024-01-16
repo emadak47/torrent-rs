@@ -1,4 +1,3 @@
-use crate::common::{FlatbufferEvent, ZenohEvent};
 use crate::flatbuffer::{
     event_factory::make_snapshot_aggregator,
     orderbook::atrimo::update_events::{
@@ -10,6 +9,7 @@ use crate::flatbuffer::{
 };
 use crate::orderbook::l2::Level;
 use crate::spsc::Producer;
+use crate::utils::{CcyPair, FlatbufferEvent, Symbol};
 use flatbuffers::Vector;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -19,8 +19,13 @@ use std::{
 type Exchange = String;
 type ExchangeQty = u64;
 type Price = u64;
-type Symbol = String;
 type BookSide = BTreeMap<Price, Metadata>;
+
+#[derive(Clone, Debug)]
+pub struct ZenohEvent {
+    pub stream_id: u8,
+    pub buff: Vec<u8>,
+}
 
 struct Metadata {
     total_qty: u64,

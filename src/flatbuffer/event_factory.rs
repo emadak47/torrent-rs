@@ -10,8 +10,8 @@ use super::{
     },
 };
 use crate::{
-    common::{CcyPair, Exchange, FlatbufferEvent},
     orderbook::l2::Level,
+    utils::{CcyPair, Exchange, FlatbufferEvent},
 };
 use failure::ResultExt;
 use std::time::SystemTime;
@@ -19,12 +19,12 @@ use std::time::SystemTime;
 pub fn make_update_event(
     bids: Vec<Level>,
     asks: Vec<Level>,
-    instrument: CcyPair,
+    ccy_pair: CcyPair,
     exchange: Exchange,
 ) -> Result<FlatbufferEvent, failure::Error> {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(10240000);
-    let exchange_name = builder.create_string(String::from(exchange).as_str());
-    let instrument_name = builder.create_string(String::from(instrument).as_str());
+    let exchange_name = builder.create_string(exchange.to_string().as_str());
+    let instrument_name = builder.create_string(ccy_pair.to_string().as_str());
 
     let mut bid_offsets = Vec::new();
     let mut ask_offsets = Vec::new();
@@ -82,12 +82,12 @@ pub fn make_update_event(
 pub fn make_snapshot_event(
     bids: Vec<Level>,
     asks: Vec<Level>,
-    instrument: CcyPair,
+    ccy_pair: CcyPair,
     exchange: Exchange,
 ) -> Result<FlatbufferEvent, failure::Error> {
     let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(10240000);
-    let exchange_name = builder.create_string(String::from(exchange).as_str());
-    let instrument_name = builder.create_string(&String::from(instrument));
+    let exchange_name = builder.create_string(exchange.to_string().as_str());
+    let instrument_name = builder.create_string(ccy_pair.to_string().as_str());
 
     let mut bid_offsets = Vec::new();
     let mut ask_offsets = Vec::new();
