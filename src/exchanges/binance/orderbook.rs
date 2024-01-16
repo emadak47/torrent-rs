@@ -7,7 +7,7 @@ use crate::exchanges::Config;
 use crate::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
 use crate::orderbook::l2::{Level, OrderbookL2};
 use failure::{Error, ResultExt};
-use std::{collections::HashMap, thread};
+use std::{env, collections::HashMap, thread};
 use zenoh::{
     config::Config as ZenohConfig,
     key_expr::keyexpr,
@@ -102,7 +102,8 @@ pub struct BinanceFeedManager {
 
 impl BinanceFeedManager {
     pub fn new(rx: tokio::sync::mpsc::UnboundedReceiver<Event>) -> Result<Self, zenoh::Error> {
-        let conf = ZenohConfig::default();
+        let file_location = env::var("ZENOH_CONFIG_DATAFEED").expect("ZENOH_CONFIG_DATAFEED not set");
+        let conf = ZenohConfig::from_file(file_location).unwrap();
         let zenoh_session = zenoh::open(conf).res()?;
         Ok(BinanceFeedManager {
             books: HashMap::new(),
