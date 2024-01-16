@@ -4,6 +4,8 @@ use std::result;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub const DATA_FEED: &str = "atrimo/datafeeds";
+pub const ASSET_CONSTANT_MULTIPLIER: f64 = 1e10;
 pub type Result<T> = result::Result<T, TorrentError>;
 pub type Symbol = String;
 
@@ -46,6 +48,25 @@ impl Display for TorrentError {
             TorrentError::BadZenoh(v) => write!(f, "zenoh error: {}", v),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct CcyPair {
+    pub base: String,
+    pub quote: String,
+    pub product: String,
+}
+
+impl Display for CcyPair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}-{}", self.base, self.quote, self.product)
+    }
+}
+
+#[derive(Debug)]
+pub struct FlatbufferEvent {
+    pub stream_id: u8,
+    pub buff: Vec<u8>,
 }
 
 pub fn now() -> u64 {
