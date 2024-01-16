@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::result;
+use zenoh::prelude::sync::SyncResolve;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -209,10 +210,25 @@ impl Metadata {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Manager {
+    zenoh: zenoh::Session,
     metadata_mp: HashMap<Symbol, Metadata>,
     snapshots_mp: HashMap<Symbol, Option<DepthSnapshot>>,
+}
+
+impl Default for Manager {
+    fn default() -> Self {
+        let config = zenoh::config::default();
+        let session = zenoh::open(config)
+            .res()
+            .unwrap_or_else(|e| panic!("Couldn't open zenoh session: {e}"));
+        Self {
+            zenoh: session,
+            metadata_mp: HashMap::default(),
+            snapshots_mp: HashMap::default(),
+        }
+    }
 }
 
 impl Manager {
