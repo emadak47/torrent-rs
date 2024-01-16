@@ -32,6 +32,7 @@ pub enum TorrentError {
     BadConnection(String),
     BadParse(String),
     Unknown(String),
+    BadZenoh(String),
 }
 
 impl Display for TorrentError {
@@ -42,6 +43,7 @@ impl Display for TorrentError {
             TorrentError::BadConnection(v) => write!(f, "connection error: {}", v),
             TorrentError::BadParse(v) => write!(f, "prasing error: {}", v),
             TorrentError::Unknown(v) => write!(f, "unknown error: {}", v),
+            TorrentError::BadZenoh(v) => write!(f, "zenoh error: {}", v),
         }
     }
 }
