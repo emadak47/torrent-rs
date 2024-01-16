@@ -263,11 +263,11 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
             Ok(msg) => {
                 // https://binance-docs.github.io/apidocs/spot/en/#how-to-manage-a-local-order-book-correctly
                 if let Message::Depth(update) = msg {
-                    let symbol = &update.symbol;
+                    let symbol = update.symbol;
                     let small_u = &update.final_update_id;
                     let big_u = &update.first_update_id;
 
-                    let metadata = self.metadata_mp.get_mut(symbol).unwrap_or_else(|| {
+                    let metadata = self.metadata_mp.get_mut(&symbol).unwrap_or_else(|| {
                         panic!("Received updates for {symbol} which was not subscribed to")
                     });
                     let is_first_update = metadata.is_first_update;
@@ -275,6 +275,7 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
 
                     let mut bids_buff = vec![];
                     let mut asks_buff = vec![];
+                    let mut is_snapshot = false;
 
                     if is_first_update {
                         // - `is_first_update` and `maybe_snapshot.is_some()` will be true together
@@ -282,7 +283,7 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
                         // - `maybe_snapshot` is placed inside the if block to avoid an additional
                         // unnecessary hashmap lookup (at the expense of readability)
                         let maybe_snapshot =
-                            self.snapshots_mp.get_mut(symbol).unwrap_or_else(|| {
+                            self.snapshots_mp.get_mut(&symbol).unwrap_or_else(|| {
                                 panic!("Received updates for {symbol} which was not subscribed to")
                             });
 
@@ -296,6 +297,7 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
                             let snapshot = maybe_snapshot.take().unwrap();
                             bids_buff = snapshot.bids;
                             asks_buff = snapshot.asks;
+                            is_snapshot = true;
                             *maybe_snapshot = None;
                             metadata.is_first_update = false;
                             metadata.small_u = *small_u;
@@ -307,9 +309,9 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
                         metadata.small_u = *small_u;
                     }
 
-                    if bids_buff.is_empty() && asks_buff.is_empty() {
+                    if !bids_buff.is_empty() || !asks_buff.is_empty() {
                         // TODO: handle error
-                        let _ = self.transmit(symbol, bids_buff, asks_buff);
+                        let _ = self.transmit(symbol, bids_buff, asks_buff, is_snapshot);
                     }
                 }
             }
@@ -346,22 +348,18 @@ impl Transmitor<Vec<LevelUpdate>> for Manager {
 
     fn transmit(
         &self,
-        symbol: &Symbol,
+        symbol: Symbol,
         bids: Vec<LevelUpdate>,
         asks: Vec<LevelUpdate>,
+        is_snapshot: bool,
     ) -> Result<()> {
         let bids = self.standardise_updates(bids);
         let asks = self.standardise_updates(asks);
         let ccy_pair = self
-            .resolve_symbol(symbol)
+            .resolve_symbol(&symbol)
             .unwrap_or_else(|| panic!("{symbol} is not supported for Binance"));
 
-        let is_first_update = self
-            .metadata_mp
-            .get(symbol)
-            .unwrap_or_else(|| panic!("{symbol} must exist in map if transmit was called"))
-            .is_first_update;
-        let (event, encoding) = if is_first_update {
+        let (event, encoding) = if is_snapshot {
             let event = make_snapshot_event(bids, asks, ccy_pair, Exchange::BINANCE)
                 .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
             let encoding = Encoding::APP_CUSTOM

@@ -27,7 +27,13 @@ where
 {
     fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair>;
     fn standardise_updates(&self, updates: U) -> Vec<Level>;
-    fn transmit(&self, symbol: &Symbol, bids: U, asks: U) -> crate::utils::Result<()>;
+    fn transmit(
+        &self,
+        symbol: Symbol,
+        bids: U,
+        asks: U,
+        is_snapshot: bool,
+    ) -> crate::utils::Result<()>;
 }
 
 #[derive(Clone, Debug)]
