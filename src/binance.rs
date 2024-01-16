@@ -1,6 +1,7 @@
-use crate::utils::{Exchange, Result, TorrentError};
-use crate::websocket::{MessageCallback, Wss};
+use crate::utils::{Exchange, Result, Symbol, TorrentError};
+use crate::websocket::{DepthCallback, Wss};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::result;
@@ -164,24 +165,9 @@ pub struct RequestError {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepthSnapshot {
-    last_update_id: u64,
-    bids: Vec<LevelUpdate>,
-    asks: Vec<LevelUpdate>,
-}
-
-pub struct Manager;
-
-impl MessageCallback<Message> for Manager {
-    fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
-        match msg? {
-            Message::Subscribe(_m) => {
-                unimplemented!()
-            }
-            Message::Depth(_m) => {
-                unimplemented!()
-            }
-        }
-    }
+    pub last_update_id: u64,
+    pub bids: Vec<LevelUpdate>,
+    pub asks: Vec<LevelUpdate>,
 }
 
 impl Display for RequestError {
@@ -205,5 +191,94 @@ impl From<API> for String {
                 Spot::Depth => "/api/v3/depth",
             },
         })
+    }
+}
+
+#[derive(Debug)]
+struct Metadata {
+    small_u: u64,
+    is_first_update: bool,
+}
+
+impl Metadata {
+    fn new(small_u: u64, is_first_update: bool) -> Self {
+        Self {
+            small_u,
+            is_first_update,
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Manager {
+    metadata_mp: HashMap<Symbol, Metadata>,
+    snapshots_mp: HashMap<Symbol, Option<DepthSnapshot>>,
+}
+
+impl Manager {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl DepthCallback<Message, DepthSnapshot> for Manager {
+    const REST_URL: &'static str = "https://api.binance.com";
+
+    fn depth_callback(
+        &mut self,
+        msg: Result<Message>,
+        snapshots_mp: Option<HashMap<Symbol, DepthSnapshot>>,
+    ) {
+        if let Some(snapshots_mp) = snapshots_mp {
+            for (symbol, snapshot) in snapshots_mp {
+                let metadata = Metadata::new(0, true);
+                self.metadata_mp.insert(symbol.clone(), metadata);
+                self.snapshots_mp.insert(symbol, Some(snapshot));
+            }
+        }
+
+        match msg {
+            Ok(msg) => {
+                // https://binance-docs.github.io/apidocs/spot/en/#how-to-manage-a-local-order-book-correctly
+                if let Message::Depth(update) = msg {
+                    let symbol = &update.symbol;
+                    let small_u = &update.final_update_id;
+                    let big_u = &update.first_update_id;
+
+                    let metadata = self.metadata_mp.get_mut(symbol).unwrap_or_else(|| {
+                        panic!("Received updates for {symbol} which was not subscribed to")
+                    });
+                    let is_first_update = metadata.is_first_update;
+                    let previous_small_u = metadata.small_u;
+
+                    if is_first_update {
+                        // - `is_first_update` and `maybe_snapshot.is_some()` will be true together
+                        // (only once; at first) and false together all the time
+                        // - `maybe_snapshot` is placed inside the if block to avoid an additional
+                        // unnecessary hashmap lookup (at the expense of readability)
+                        let maybe_snapshot =
+                            self.snapshots_mp.get_mut(symbol).unwrap_or_else(|| {
+                                panic!("Received updates for {symbol} which was not subscribed to")
+                            });
+
+                        // 4. Drop (skip) event where u <= lastUpdateId
+                        // 5. U <= lastUpdateId + 1 AND u >= lastUpdateId
+                        #[allow(clippy::blocks_in_if_conditions)]
+                        if maybe_snapshot.as_ref().is_some_and(|snapshot| {
+                            let cond = snapshot.last_update_id + 1;
+                            (*big_u <= cond) && (*small_u >= cond)
+                        }) {
+                            *maybe_snapshot = None;
+                            metadata.is_first_update = false;
+                            metadata.small_u = *small_u;
+                        }
+                    // 6. New event's U == previous event's u + 1
+                    } else if *big_u == previous_small_u + 1 {
+                        metadata.small_u = *small_u;
+                    }
+                }
+            }
+            Err(e) => eprintln!("{:?}", e),
+        }
     }
 }
