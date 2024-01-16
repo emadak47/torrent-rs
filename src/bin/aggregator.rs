@@ -4,8 +4,9 @@ use async_wss::{
     spsc::{QueueError, SPSCQueue},
 };
 use std::thread;
+use std::env;
 use zenoh::{
-    config::Config,
+    config::Config as ZenohConfig,
     key_expr::keyexpr,
     prelude::{sync::SyncResolve, Encoding, KnownEncoding},
 };
@@ -16,10 +17,11 @@ fn main() {
 
     // consumes zenoh events and push to the queue
     let zenoh_rx_thread = thread::spawn(move || {
-        let conf = Config::default();
-        let session = zenoh::open(conf)
-            .res()
-            .expect("failed to open zenoh session");
+        
+        let file_location = env::var("ZENOH_CONFIG_AGGREGATOR").expect("ZENOH_CONFIG_AGGREGATOR not set");        
+        let conf = ZenohConfig::from_file(file_location).unwrap();
+        let session = zenoh::open(conf).res().unwrap();
+
         let key_expr = keyexpr::new(DATA_FEED).expect("failed to get a zenoh key experession");
         let subscriber = session
             .declare_subscriber(key_expr)
@@ -85,10 +87,11 @@ fn main() {
 
     // produce to remote/external services
     let extern_producing_thread = thread::spawn(move || {
-        let conf = Config::default();
-        let session = zenoh::open(conf)
-            .res()
-            .expect("failed to open zenoh session");
+        
+        let file_location = env::var("ZENOH_CONFIG_PRODUCER").expect("ZENOH_CONFIG_PRODUCER not set");        
+        let conf = ZenohConfig::from_file(file_location).unwrap();
+        let session = zenoh::open(conf).res().unwrap();
+
         let key_expr = keyexpr::new(DATA_FEED).expect("failed to get a zenoh key experession");
 
         loop {

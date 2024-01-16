@@ -1,0 +1,7 @@
+{
+  mode: "peer",
+  connect: {
+    // Public IP of the consumer
+    endpoints: ["tcp/18.167.68.169:8080"]
+  }
+}
