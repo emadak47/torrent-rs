@@ -1,4 +1,9 @@
-use crate::utils::{Exchange, Result, Symbol, TorrentError};
+use crate::aggregator::Transmitor;
+use crate::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
+use crate::orderbook::l2::Level;
+use crate::utils::{
+    CcyPair, Exchange, Result, Symbol, TorrentError, ASSET_CONSTANT_MULTIPLIER, DATA_FEED,
+};
 use crate::websocket::{DepthCallback, Wss};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -6,6 +11,7 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::result;
 use zenoh::prelude::sync::SyncResolve;
+use zenoh::prelude::Encoding;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -267,6 +273,9 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
                     let is_first_update = metadata.is_first_update;
                     let previous_small_u = metadata.small_u;
 
+                    let mut bids_buff = vec![];
+                    let mut asks_buff = vec![];
+
                     if is_first_update {
                         // - `is_first_update` and `maybe_snapshot.is_some()` will be true together
                         // (only once; at first) and false together all the time
@@ -284,17 +293,96 @@ impl DepthCallback<Message, DepthSnapshot> for Manager {
                             let cond = snapshot.last_update_id + 1;
                             (*big_u <= cond) && (*small_u >= cond)
                         }) {
+                            let snapshot = maybe_snapshot.take().unwrap();
+                            bids_buff = snapshot.bids;
+                            asks_buff = snapshot.asks;
                             *maybe_snapshot = None;
                             metadata.is_first_update = false;
                             metadata.small_u = *small_u;
                         }
                     // 6. New event's U == previous event's u + 1
                     } else if *big_u == previous_small_u + 1 {
+                        bids_buff = update.bids;
+                        asks_buff = update.asks;
                         metadata.small_u = *small_u;
+                    }
+
+                    if bids_buff.is_empty() && asks_buff.is_empty() {
+                        // TODO: handle error
+                        let _ = self.transmit(symbol, bids_buff, asks_buff);
                     }
                 }
             }
             Err(e) => eprintln!("{:?}", e),
         }
+    }
+}
+
+impl Transmitor<Vec<LevelUpdate>> for Manager {
+    fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair> {
+        let regex =
+            regex::Regex::new(r"^(\w+)(BTC|TRY|ETH|BNB|USDT|PAX|TUSD|USDC|XRP|USDS)$").ok()?;
+        let capture = regex.captures(symbol)?;
+        let (base, quote) = (capture.get(1)?, capture.get(2)?);
+
+        return Some(CcyPair {
+            base: base.as_str().to_string(),
+            quote: quote.as_str().to_string(),
+            product: "spot".to_string(),
+        });
+    }
+
+    fn standardise_updates(&self, updates: Vec<LevelUpdate>) -> Vec<Level> {
+        updates
+            .into_iter()
+            .map(|update| {
+                let update = *update;
+                let update_0 = (update[0] * ASSET_CONSTANT_MULTIPLIER) as u64;
+                let update_1 = (update[1] * ASSET_CONSTANT_MULTIPLIER) as u64;
+                Level::new(update_0, update_1)
+            })
+            .collect()
+    }
+
+    fn transmit(
+        &self,
+        symbol: &Symbol,
+        bids: Vec<LevelUpdate>,
+        asks: Vec<LevelUpdate>,
+    ) -> Result<()> {
+        let bids = self.standardise_updates(bids);
+        let asks = self.standardise_updates(asks);
+        let ccy_pair = self
+            .resolve_symbol(symbol)
+            .unwrap_or_else(|| panic!("{symbol} is not supported for Binance"));
+
+        let is_first_update = self
+            .metadata_mp
+            .get(symbol)
+            .unwrap_or_else(|| panic!("{symbol} must exist in map if transmit was called"))
+            .is_first_update;
+        let (event, encoding) = if is_first_update {
+            let event = make_snapshot_event(bids, asks, ccy_pair, Exchange::BINANCE)
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            let encoding = Encoding::APP_CUSTOM
+                .with_suffix("snapshot_event")
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            (event, encoding)
+        } else {
+            let event = make_update_event(bids, asks, ccy_pair, Exchange::BINANCE)
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            let encoding = Encoding::APP_CUSTOM
+                .with_suffix("snapshot_event")
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            (event, encoding)
+        };
+
+        let datafeed = zenoh::key_expr::keyexpr::new(DATA_FEED)
+            .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+        self.zenoh
+            .put(datafeed, event.buff)
+            .encoding(encoding)
+            .res()
+            .map_err(|e| TorrentError::BadZenoh(e.to_string()))
     }
 }

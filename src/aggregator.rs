@@ -21,6 +21,15 @@ type ExchangeQty = u64;
 type Price = u64;
 type BookSide = BTreeMap<Price, Metadata>;
 
+pub trait Transmitor<U>
+where
+    U: IntoIterator,
+{
+    fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair>;
+    fn standardise_updates(&self, updates: U) -> Vec<Level>;
+    fn transmit(&self, symbol: &Symbol, bids: U, asks: U) -> crate::utils::Result<()>;
+}
+
 #[derive(Clone, Debug)]
 pub struct ZenohEvent {
     pub stream_id: u8,
