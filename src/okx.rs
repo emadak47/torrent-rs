@@ -1,9 +1,16 @@
-use crate::utils::{Exchange, Result, TorrentError};
+use crate::aggregator::Transmitor;
+use crate::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
+use crate::orderbook::l2::Level;
+use crate::utils::{
+    CcyPair, Exchange, Result, Symbol, TorrentError, ASSET_CONSTANT_MULTIPLIER, DATA_FEED,
+};
 use crate::websocket::{MessageCallback, Wss};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::result;
+use zenoh::prelude::sync::SyncResolve;
+use zenoh::prelude::Encoding;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -209,26 +216,118 @@ impl Wss for Okx {
     }
 }
 
-pub struct Manager;
+#[derive(Debug)]
+pub struct Manager {
+    zenoh: zenoh::Session,
+}
+
+impl Default for Manager {
+    fn default() -> Self {
+        let config = zenoh::config::default();
+        let session = zenoh::open(config)
+            .res()
+            .unwrap_or_else(|e| panic!("Couldn't open zenoh session: {e}"));
+        Self { zenoh: session }
+    }
+}
+
+impl Manager {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
 
 impl MessageCallback<Message> for Manager {
     fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
         match msg? {
             Message::Failure(m) => {
                 if m.msg.contains("Invalid request") {
-                    // TODO: panic?
+                    return Err(TorrentError::BadRequest(format!("{:?}", m)));
                 } else if m.msg.contains("Connection refused") {
                     // TODO: Sleep then reconnect
+                    panic!("{:?}", m);
                 }
-                unimplemented!()
+                // TODO: handle it better
+                panic!("{:?}", m);
             }
-            Message::Subscribe(_m) => {
-                unimplemented!()
+            Message::Books(update) => {
+                let mut is_snapshot = false;
+                if update.action == "snapshot" {
+                    is_snapshot = true;
+                }
+                let symbol = update.arg.inst_id;
+                for data in update.data {
+                    // cloning is ok since `update.data.len() == 1` 99% of the time
+                    let _ = self.transmit(symbol.clone(), data.bids, data.asks, is_snapshot);
+                }
             }
-            Message::Books(_m) => {
-                unimplemented!()
-            }
+            _ => {}
         }
         Ok(())
+    }
+}
+
+impl Transmitor<Vec<LevelUpdate>> for Manager {
+    fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair> {
+        let parts = symbol.split('-').collect::<Vec<&str>>();
+        if parts.len() == 2 {
+            Some(CcyPair {
+                base: parts[0].to_string(),
+                quote: parts[1].to_string(),
+                product: "spot".to_string(),
+            })
+        } else {
+            None
+        }
+    }
+
+    fn standardise_updates(&self, updates: Vec<LevelUpdate>) -> Vec<Level> {
+        updates
+            .into_iter()
+            .map(|update| {
+                let update = *update;
+                let update_0 = (update[0] * ASSET_CONSTANT_MULTIPLIER) as u64;
+                let update_1 = (update[1] * ASSET_CONSTANT_MULTIPLIER) as u64;
+                Level::new(update_0, update_1)
+            })
+            .collect()
+    }
+
+    fn transmit(
+        &self,
+        symbol: Symbol,
+        bids: Vec<LevelUpdate>,
+        asks: Vec<LevelUpdate>,
+        is_snapshot: bool,
+    ) -> Result<()> {
+        let bids = self.standardise_updates(bids);
+        let asks = self.standardise_updates(asks);
+        let ccy_pair = self
+            .resolve_symbol(&symbol)
+            .unwrap_or_else(|| panic!("{symbol} is not supported for Okx"));
+
+        let (event, encoding) = if is_snapshot {
+            let event = make_snapshot_event(bids, asks, ccy_pair, Exchange::OKX)
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            let encoding = Encoding::APP_CUSTOM
+                .with_suffix("snapshot_event")
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            (event, encoding)
+        } else {
+            let event = make_update_event(bids, asks, ccy_pair, Exchange::OKX)
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            let encoding = Encoding::APP_CUSTOM
+                .with_suffix("snapshot_event")
+                .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+            (event, encoding)
+        };
+
+        let datafeed = zenoh::key_expr::keyexpr::new(DATA_FEED)
+            .map_err(|e| TorrentError::BadZenoh(e.to_string()))?;
+        self.zenoh
+            .put(datafeed, event.buff)
+            .encoding(encoding)
+            .res()
+            .map_err(|e| TorrentError::BadZenoh(e.to_string()))
     }
 }
