@@ -1,9 +1,7 @@
-use async_wss::common::{scale, ZenohEvent};
+use async_wss::{aggregator::ZenohEvent, utils::ASSET_CONSTANT_MULTIPLIER};
 
 mod common;
-use common::{
-    setup, setup_aggregator, setup_flatbuffer, Index, Source, Type, ASSET_CONSTANT_MULTIPLIER,
-};
+use common::{scale, setup, setup_aggregator, setup_flatbuffer, Index, Source, Type};
 
 #[test]
 fn test_unknown_event() {
@@ -74,7 +72,7 @@ fn test_levels() {
         == [2, 4, 6]
             .iter()
             .rev()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(|i| scale(*i))
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -83,7 +81,7 @@ fn test_levels() {
     assert!(ask_levels.is_some_and(|x| x
         == [1, 3, 5]
             .iter()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(|i| scale(*i))
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -117,7 +115,7 @@ fn test_reset_event() {
         == vec![2, 8, 10, 12]
             .into_iter()
             .rev()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -126,7 +124,7 @@ fn test_reset_event() {
     assert!(ask_levels.is_some_and(|x| x
         == vec![5, 7, 9, 11]
             .into_iter()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -175,7 +173,7 @@ fn test_update_event() {
         == vec![2, 4, 8, 10]
             .into_iter()
             .rev()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -184,7 +182,7 @@ fn test_update_event() {
     assert!(ask_levels.is_some_and(|x| x
         == vec![1, 3, 7, 9]
             .into_iter()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -233,7 +231,7 @@ fn test_mixed_snapshots() {
         == vec![2, 4, 6, 8, 10, 12]
             .into_iter()
             .rev()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -242,7 +240,7 @@ fn test_mixed_snapshots() {
     assert!(ask_levels.is_some_and(|x| x
         == vec![1, 3, 5, 7, 9, 11]
             .into_iter()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -309,7 +307,7 @@ fn test_mixed_updates() {
         == vec![2, 4, 8, 10, 12]
             .into_iter()
             .rev()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -318,7 +316,7 @@ fn test_mixed_updates() {
     assert!(ask_levels.is_some_and(|x| x
         == vec![1, 3, 7, 9, 11]
             .into_iter()
-            .map(|i| scale(&*i.to_string()).unwrap())
+            .map(scale)
             .collect::<Vec<u64>>()
             .iter()
             .collect::<Vec<&u64>>()));
@@ -364,13 +362,13 @@ fn test_bids_till_bps() {
 
     let instrument = "btc-usdt-spot";
     let till_25bps = aggregator.get_bid_qty_till(instrument, 25);
-    assert!(till_25bps.is_some_and(|x| x == scale(&*(100).to_string()).unwrap()));
+    assert!(till_25bps.is_some_and(|x| x == scale(100)));
 
     let till_50bps = aggregator.get_bid_qty_till(instrument, 50);
-    assert!(till_50bps.is_some_and(|x| x == scale(&*(100).to_string()).unwrap()));
+    assert!(till_50bps.is_some_and(|x| x == scale(100)));
 
     let till_75bps = aggregator.get_bid_qty_till(instrument, 75);
-    assert!(till_75bps.is_some_and(|x| x == scale(&*(100).to_string()).unwrap()));
+    assert!(till_75bps.is_some_and(|x| x == scale(100)));
 }
 
 #[test]
@@ -384,11 +382,11 @@ fn test_asks_till_bps() {
 
     let instrument = "btc-usdt-spot";
     let till_25bps = aggregator.get_ask_qty_till(instrument, 25);
-    assert!(till_25bps.is_some_and(|x| x == scale(&*(40).to_string()).unwrap()));
+    assert!(till_25bps.is_some_and(|x| x == scale(40)));
 
     let till_50bps = aggregator.get_ask_qty_till(instrument, 50);
-    assert!(till_50bps.is_some_and(|x| x == scale(&*(40).to_string()).unwrap()));
+    assert!(till_50bps.is_some_and(|x| x == scale(40)));
 
     let till_75bps = aggregator.get_ask_qty_till(instrument, 75);
-    assert!(till_75bps.is_some_and(|x| x == scale(&*(40).to_string()).unwrap()));
+    assert!(till_75bps.is_some_and(|x| x == scale(40)));
 }

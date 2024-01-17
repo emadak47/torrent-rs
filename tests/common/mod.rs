@@ -1,12 +1,14 @@
 use async_wss::{
     aggregator::Aggregator,
-    common::{scale, CcyPair, Exchange, FlatbufferEvent},
     flatbuffer::event_factory::{make_snapshot_event, make_update_event},
     orderbook::l2::Level,
     spsc::SPSCQueue,
+    utils::{CcyPair, Exchange, FlatbufferEvent, ASSET_CONSTANT_MULTIPLIER},
 };
 
-pub static ASSET_CONSTANT_MULTIPLIER: f64 = 1e10;
+pub fn scale(x: impl Into<f64>) -> u64 {
+    (x.into() * ASSET_CONSTANT_MULTIPLIER) as u64
+}
 
 pub enum Index {
     Standard,
@@ -32,7 +34,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             asks = vec![1, 3, 5]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     Level {
                         price: num,
                         qty: num * 10,
@@ -42,7 +44,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             bids = vec![2, 4, 6]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     Level {
                         price: num,
                         qty: num * 10,
@@ -54,7 +56,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             asks = vec![5, 7, 9, 11]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     Level {
                         price: num,
                         qty: num * 10,
@@ -64,7 +66,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             bids = vec![2, 8, 10, 12]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     Level {
                         price: num,
                         qty: num * 10,
@@ -76,7 +78,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             asks = vec![1, 3, 5, 7, 9]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     if x != 5 {
                         Level {
                             price: num,
@@ -90,7 +92,7 @@ pub fn setup_levels(idx: Index) -> (Vec<Level>, Vec<Level>) {
             bids = vec![2, 4, 6, 8, 10]
                 .into_iter()
                 .map(|x| {
-                    let num = scale(&*x.to_string()).unwrap();
+                    let num = scale(x);
                     if x != 6 {
                         Level {
                             price: num,
@@ -122,12 +124,12 @@ pub fn setup_flatbuffer(idx: Index, src: Source) -> FlatbufferEvent {
 
     match src {
         Source::Binance(t) => match t {
-            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Binance).unwrap(),
-            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Binance).unwrap(),
+            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::BINANCE).unwrap(),
+            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::BINANCE).unwrap(),
         },
         Source::Okx(t) => match t {
-            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::Okx).unwrap(),
-            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::Okx).unwrap(),
+            Type::Snapshot => make_snapshot_event(bids, asks, ccy_pair, Exchange::OKX).unwrap(),
+            Type::Update => make_update_event(bids, asks, ccy_pair, Exchange::OKX).unwrap(),
         },
     }
 }
