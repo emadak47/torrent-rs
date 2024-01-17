@@ -34,7 +34,7 @@ pub struct ZenohEvent {
     pub buff: Vec<u8>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Metadata {
     total_qty: u64,
     ex_qty_mp: HashMap<Exchange, ExchangeQty>,
@@ -87,7 +87,7 @@ impl Aggregator {
         bids: Vector<SnapshotBidData>,
         asks: Vector<SnapshotAskData>,
     ) -> Result<()> {
-        println!("Snapshot event: `{exchange}` | `{symbol}`");
+        log::info!("Snapshot event: `{exchange}` | `{symbol}`");
 
         let mut bids_to_remove = Vec::new();
         let mut asks_to_remove = Vec::new();
@@ -127,10 +127,10 @@ impl Aggregator {
                 .get_mut(symbol)
                 .expect("len must be 0 if book didn't exist");
             for a in asks_to_remove {
-                book.ask_book.remove(&a);
+                let _ = book.ask_book.remove(&a);
             }
             for b in bids_to_remove {
-                book.bid_book.remove(&b);
+                let _ = book.bid_book.remove(&b);
             }
         }
 
@@ -205,7 +205,7 @@ impl Aggregator {
                 }
                 if qty == 0 {
                     metadata.ex_qty_mp.remove(exchange);
-                    if metadata.total_qty == 0 {
+                    if metadata.total_qty == 0 && metadata.ex_qty_mp.is_empty() {
                         bids_to_remove.push(price);
                     }
                 } else {
@@ -229,7 +229,7 @@ impl Aggregator {
                 }
                 if qty == 0 {
                     metadata.ex_qty_mp.remove(exchange);
-                    if metadata.total_qty == 0 {
+                    if metadata.total_qty == 0 && metadata.ex_qty_mp.is_empty() {
                         asks_to_remove.push(price);
                     }
                 } else {
@@ -247,10 +247,10 @@ impl Aggregator {
         // remove price levels with total qty 0
         if !asks_to_remove.is_empty() || !bids_to_remove.is_empty() {
             for b in bids_to_remove {
-                book.bid_book.remove(&b);
+                let _ = book.bid_book.remove(&b);
             }
             for a in asks_to_remove {
-                book.ask_book.remove(&a);
+                let _ = book.ask_book.remove(&a);
             }
         }
 
