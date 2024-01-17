@@ -1,6 +1,6 @@
 use async_wss::{
-    common::FlatbufferEvent,
     spsc::{QueueError, SPSCQueue},
+    utils::FlatbufferEvent,
 };
 
 #[test]
