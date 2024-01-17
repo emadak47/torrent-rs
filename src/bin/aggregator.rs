@@ -1,7 +1,7 @@
 use async_wss::{
-    aggregator::Aggregator,
-    common::{FlatbufferEvent, ZenohEvent, DATA_FEED},
+    aggregator::{Aggregator, ZenohEvent},
     spsc::{QueueError, SPSCQueue},
+    utils::{FlatbufferEvent, DATA_FEED},
 };
 use std::thread;
 use zenoh::{

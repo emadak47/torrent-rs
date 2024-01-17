@@ -1,31 +1,28 @@
-use async_wss::exchanges::binance::{orderbook::BinanceFeedManager, spot::SpotWSClientBuilder};
+use async_wss::binance::{DepthSnapshot, Manager as BinanceManager, Message, RequestError};
+use async_wss::utils::Exchange;
+use async_wss::websocket::WebSocketClient;
 
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "api=info");
     }
-    pretty_env_logger::init();
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    dotenv::dotenv().ok();
 
-    let mut ws_builder = SpotWSClientBuilder::default();
-    // ws_builder.sub_trade("ETHUSDT");
-    ws_builder.sub_ob_depth("BTCUSDT");
+    let products = vec!["BTC-USDT".to_string() /* "ETH-USDT".to_string() */];
+    let cb_obj = BinanceManager::new();
+    let mut wss = WebSocketClient::new();
 
-    let ws_client = ws_builder
-        .build()
+    let socket_reader = wss.connect(Exchange::BINANCE).await.unwrap();
+
+    let listener = wss
+        .depth_subscribe::<BinanceManager, RequestError, Message, DepthSnapshot>(
+            socket_reader,
+            products,
+            cb_obj,
+        )
         .await
-        .expect("failed to get spot wss client");
-    let _ws_client = ws_client.connect(tx).await.unwrap();
+        .unwrap();
 
-    let mut ob_feed = BinanceFeedManager::new(rx).unwrap();
-    tokio::spawn(async move {
-        ob_feed.run().await.unwrap();
-    });
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    // ws_client.sub_ob_depth("SOLUSDT").await.unwrap();
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    // ws_client.unsub_ob_depth("BTCUSDT").await.unwrap();
-    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+    listener.await.unwrap();
 }
