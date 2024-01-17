@@ -28,7 +28,7 @@ where
     fn transmit(&self, symbol: Symbol, bids: U, asks: U, is_snapshot: bool) -> Result<()>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ZenohEvent {
     pub stream_id: u8,
     pub buff: Vec<u8>,

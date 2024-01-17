@@ -1,8 +1,8 @@
-use async_wss::aggregator::Aggregator;
-use async_wss::common::{CcyPair, Exchange, FlatbufferEvent, ZenohEvent};
+use async_wss::aggregator::{Aggregator, ZenohEvent};
 use async_wss::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
 use async_wss::orderbook::l2::Level;
 use async_wss::spsc::SPSCQueue;
+use async_wss::utils::{CcyPair, Exchange, FlatbufferEvent};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
@@ -39,7 +39,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     Scenario 1 : aggregator inserting snapshot from binance with 200 levels
     */
     let (bids, asks, currency_pair) = setup_data(200);
-    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::BINANCE).unwrap();
     let zenoh_event = ZenohEvent {
         stream_id: 0,
         buff: event.buff,
@@ -55,7 +55,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         2. Binance snapshot event comes in with 200 levels
     */
     let (bids, asks, currency_pair) = setup_data(200);
-    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::BINANCE).unwrap();
     let zenoh_event = ZenohEvent {
         stream_id: 0,
         buff: event.buff,
@@ -71,7 +71,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         2. OKX snapshot event comes in with 180 levels
     */
     let (bids, asks, currency_pair) = setup_data(180);
-    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::Okx).unwrap();
+    let event = make_snapshot_event(bids, asks, currency_pair, Exchange::BINANCE).unwrap();
     let zenoh_event = ZenohEvent {
         stream_id: 0,
         buff: event.buff,
@@ -85,7 +85,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     Scenario 4: update events from Okx of 50 levels
     */
     let (bids, asks, currency_pair) = setup_data(50);
-    let event = make_update_event(bids, asks, currency_pair, Exchange::Okx).unwrap();
+    let event = make_update_event(bids, asks, currency_pair, Exchange::BINANCE).unwrap();
     let zenoh_event = ZenohEvent {
         stream_id: 1,
         buff: event.buff,
@@ -99,7 +99,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     Scenario 5: update events from binance of 70 levels
     */
     let (bids, asks, currency_pair) = setup_data(70);
-    let event = make_update_event(bids, asks, currency_pair, Exchange::Binance).unwrap();
+    let event = make_update_event(bids, asks, currency_pair, Exchange::BINANCE).unwrap();
     let zenoh_event = ZenohEvent {
         stream_id: 1,
         buff: event.buff,
