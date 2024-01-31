@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Div;
 
 type Exchange = String;
-type ExchangeQty = u64;
+type Qty = u64;
 type Price = u64;
 type BookSide = BTreeMap<Price, Metadata>;
 
@@ -37,7 +37,7 @@ pub struct ZenohEvent {
 #[derive(Default, Debug)]
 struct Metadata {
     total_qty: u64,
-    ex_qty_mp: HashMap<Exchange, ExchangeQty>,
+    ex_qty_mp: HashMap<Exchange, Qty>,
 }
 
 impl Metadata {
