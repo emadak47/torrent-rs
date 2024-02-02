@@ -63,7 +63,6 @@ impl WebSocketClient {
             Exchange::BULLISH => Bullish::URL,
         };
 
-        println!("url {}", url);
         let reader = match connect_async(url).await {
             Ok((socket, _)) => {
                 let (writer, reader) = socket.split();
@@ -110,7 +109,6 @@ impl WebSocketClient {
             Some(ex) => match &mut self.socket_w {
                 Some(ref mut socket) => {
                     let sub_req = ex.subscribe(channel, topics)?;
-                    println!("sub request {}", sub_req);
                     match socket.send(tungstenite::Message::text(sub_req)).await {
                         Ok(_) => Ok(()),
                         Err(e) => Err(TorrentError::BadConnection(format!(
