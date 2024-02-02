@@ -20,10 +20,10 @@ pub enum Message {
 }
 
 #[derive(Debug)]
-pub struct LevelUpdate([f64; 4]);
+pub struct LevelUpdate(f64);
 
-impl Deref for LevelUpdate {
-    type Target = [f64; 4];
+impl std::ops::Deref for LevelUpdate {
+    type Target = f64;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -35,36 +35,16 @@ impl<'de> Deserialize<'de> for LevelUpdate {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_tuple(4, LevelUpdateVisitor)
-    }
-}
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let parsed_value: result::Result<f64, _> = s.parse();
 
-struct LevelUpdateVisitor;
-
-impl<'de> serde::de::Visitor<'de> for LevelUpdateVisitor {
-    type Value = LevelUpdate;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("Fixed-size array of 4 strings")
-    }
-
-    fn visit_seq<A>(self, mut seq: A) -> result::Result<Self::Value, A::Error>
-    where
-        A: serde::de::SeqAccess<'de>,
-    {
-        let mut arr = [0.0; 4];
-        let mut i: usize = 0;
-
-        while let Some(v) = seq.next_element::<String>()? {
-            // v is a valid string but not parsable to f64
-            let non_f64 = serde::de::Unexpected::Str(v.as_str());
-            let element = v
-                .parse()
-                .map_err(|_| serde::de::Error::invalid_value(non_f64, &self))?;
-            arr[i] = element;
-            i += 1;
+        match parsed_value {
+            Ok(value) => Ok(LevelUpdate(value)),
+            Err(_) => Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(&s),
+                &"a valid f64",
+            )),
         }
-        Ok(LevelUpdate(arr))
     }
 }
 
@@ -128,13 +108,13 @@ impl Subscription {
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Channel {
-    BOOKS,
+    l2Orderbook,
 }
 
 impl Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Channel::BOOKS => write!(f, "l2Orderbook"),
+            Channel::l2Orderbook => write!(f, "l2Orderbook"),
         }
     }
 }
@@ -233,25 +213,33 @@ impl MessageCallback<Message> for Manager {
 impl Transmitor<Vec<LevelUpdate>> for Manager {
     fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair> {
         let parts = symbol.split('-').collect::<Vec<&str>>();
-        if parts.len() == 2 {
-            Some(CcyPair {
-                base: parts[0].to_string(),
-                quote: parts[1].to_string(),
-                product: "spot".to_string(),
-            })
+
+        let product = if parts.len() == 3 {
+            if parts.get(2) == Some(&"PERP") {
+                "futures".to_string()
+            } else {
+                "spot".to_string()
+            }
         } else {
-            None
-        }
+            "spot".to_string()
+        };
+    
+        Some(CcyPair {
+            base: parts[0].to_string(),
+            quote: parts[1].to_string(),
+            product,
+        })
     }
+    
+    
 
     fn standardise_updates(&self, updates: Vec<LevelUpdate>) -> Vec<Level> {
         updates
-            .into_iter()
-            .map(|update| {
-                let update = *update;
-                let update_0 = (update[0] * ASSET_CONSTANT_MULTIPLIER) as u64;
-                let update_1 = (update[1] * ASSET_CONSTANT_MULTIPLIER) as u64;
-                Level::new(update_0, update_1)
+            .chunks_exact(2)
+            .map(|chunk| {
+                let price = (chunk[0].0 * ASSET_CONSTANT_MULTIPLIER) as u64;
+                let qty = (chunk[1].0 * ASSET_CONSTANT_MULTIPLIER) as u64;
+                Level::new(price, qty)
             })
             .collect()
     }
