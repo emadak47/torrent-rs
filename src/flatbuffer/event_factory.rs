@@ -1,18 +1,14 @@
-use super::{
-    orderbook::atrimo::update_events::{
-        finish_update_event_message_buffer, UpdateAskData, UpdateBidData, UpdateData,
-        UpdateDataArgs, UpdateEvent, UpdateEventArgs, UpdateEventMessage, UpdateEventMessageArgs,
-    },
-    snapshot::atrimo::snapshot_events::{
-        finish_snapshot_event_message_buffer, SnapshotAskData, SnapshotBidData, SnapshotData,
-        SnapshotDataArgs, SnapshotEvent, SnapshotEventArgs, SnapshotEventMessage,
-        SnapshotEventMessageArgs,
-    },
+use super::orderbook::atrimo::update_events::{
+    finish_update_event_message_buffer, UpdateAskData, UpdateBidData, UpdateData, UpdateDataArgs,
+    UpdateEvent, UpdateEventArgs, UpdateEventMessage, UpdateEventMessageArgs,
 };
-use crate::{
-    orderbook::l2::Level,
-    utils::{CcyPair, Exchange, FlatbufferEvent},
+use super::snapshot::atrimo::snapshot_events::{
+    finish_snapshot_event_message_buffer, SnapshotAskData, SnapshotBidData, SnapshotData,
+    SnapshotDataArgs, SnapshotEvent, SnapshotEventArgs, SnapshotEventMessage,
+    SnapshotEventMessageArgs,
 };
+use crate::orderbook::l2::Level;
+use crate::utils::{CcyPair, Exchange, FlatbufferEvent};
 use failure::ResultExt;
 use std::time::SystemTime;
 

@@ -1,11 +1,6 @@
 use crate::flatbuffer::{
-    event_factory::make_snapshot_aggregator,
-    orderbook::atrimo::update_events::{
-        root_as_update_event_message, UpdateAskData, UpdateBidData,
-    },
-    snapshot::atrimo::snapshot_events::{
-        root_as_snapshot_event_message, SnapshotAskData, SnapshotBidData,
-    },
+    make_snapshot_aggregator, root_as_snapshot_event_message, root_as_update_event_message,
+    SnapshotAskData, SnapshotBidData, UpdateAskData, UpdateBidData,
 };
 use crate::orderbook::l2::Level;
 use crate::spsc::Producer;
