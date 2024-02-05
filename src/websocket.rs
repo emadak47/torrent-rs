@@ -22,7 +22,6 @@ use tokio_tungstenite::{
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type SocketReader = SplitStream<Socket>;
 type SocketWriter = SplitSink<Socket, tungstenite::Message>;
-type Callback<T> = fn(Result<T>);
 
 pub trait MessageCallback<T> {
     fn message_callback(&mut self, msg: Result<T>) -> Result<()>;
