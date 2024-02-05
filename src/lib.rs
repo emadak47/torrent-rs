@@ -1,6 +1,7 @@
 pub mod aggregator;
 pub mod binance;
 pub mod coinbase;
+pub mod bybit;
 pub mod flatbuffer;
 pub mod okx;
 pub mod orderbook;
