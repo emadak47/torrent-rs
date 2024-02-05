@@ -15,6 +15,7 @@ pub enum Exchange {
     OKX,
     COINBASE,
     BINANCE,
+    BYBIT,
 }
 
 impl Display for Exchange {
@@ -23,6 +24,8 @@ impl Display for Exchange {
             Exchange::COINBASE => write!(f, "Coinbase"),
             Exchange::OKX => write!(f, "Okx"),
             Exchange::BINANCE => write!(f, "Binance"),
+            Exchange::BYBIT => write!(f, "Bybit"),
+
         }
     }
 }

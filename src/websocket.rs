@@ -1,5 +1,6 @@
 use crate::binance::{Binance, Channel, Spot, API};
 use crate::coinbase::Coinbase;
+use crate::bybit::Bybit;
 use crate::okx::Okx;
 use crate::rest::RestClient;
 use crate::utils::{Exchange, Result, Symbol, TorrentError};
@@ -58,6 +59,8 @@ impl WebSocketClient {
             Exchange::COINBASE => Coinbase::URL,
             Exchange::OKX => Okx::URL,
             Exchange::BINANCE => Binance::URL,
+            Exchange::BYBIT => Bybit::URL,
+
         };
 
         let reader = match connect_async(url).await {
@@ -91,6 +94,10 @@ impl WebSocketClient {
             Exchange::BINANCE => {
                 let binance = Binance::new();
                 self.exchange = Some(Box::new(binance));
+            }
+            Exchange::BYBIT => {
+                let bybit = Bybit::new();
+                self.exchange = Some(Box::new(bybit));
             }
         };
 
