@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
-enum Side {
+pub enum Side {
     BUY,
     SELL,
 }
