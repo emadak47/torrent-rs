@@ -1,5 +1,5 @@
 use crate::aggregator::Transmitor;
-use crate::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
+use crate::flatbuffer::{make_snapshot_event, make_update_event};
 use crate::orderbook::l2::Level;
 use crate::utils::{
     CcyPair, Exchange, Result, Symbol, TorrentError, ASSET_CONSTANT_MULTIPLIER, DATA_FEED,
