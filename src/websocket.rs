@@ -1,6 +1,7 @@
 use crate::binance::{Binance, Channel, Spot, API};
 use crate::coinbase::Coinbase;
 use crate::okx::Okx;
+use crate::bullish::Bullish;
 use crate::rest::RestClient;
 use crate::utils::{Exchange, Result, Symbol, TorrentError};
 use futures_util::{
@@ -58,6 +59,7 @@ impl WebSocketClient {
             Exchange::COINBASE => Coinbase::URL,
             Exchange::OKX => Okx::URL,
             Exchange::BINANCE => Binance::URL,
+            Exchange::BULLISH => Bullish::URL,
         };
 
         let reader = match connect_async(url).await {
@@ -91,6 +93,10 @@ impl WebSocketClient {
             Exchange::BINANCE => {
                 let binance = Binance::new();
                 self.exchange = Some(Box::new(binance));
+            }
+            Exchange::BULLISH => {
+                let bullish = Bullish::new();
+                self.exchange = Some(Box::new(bullish));
             }
         };
 
@@ -135,11 +141,16 @@ impl WebSocketClient {
             };
 
             let _ = match serde_json::from_str(&data) {
-                Ok(msg) => manager.message_callback(Ok(msg)),
-                Err(e) => manager.message_callback(Err(TorrentError::BadParse(format!(
+                Ok(msg) => {
+                    manager.message_callback(Ok(msg))
+                
+                },
+                Err(e) => {
+                    manager.message_callback(Err(TorrentError::BadParse(format!(
                     "Unable to parse msg because {} {}",
                     e, data
-                )))),
+                ))))
+                },
             };
 
             async {}
