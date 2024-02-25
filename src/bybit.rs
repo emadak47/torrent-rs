@@ -1,5 +1,5 @@
 use crate::aggregator::Transmitor;
-use crate::flatbuffer::event_factory::{make_snapshot_event, make_update_event};
+use crate::flatbuffer::{make_snapshot_event, make_update_event};
 use crate::orderbook::l2::Level;
 use crate::utils::{
     CcyPair, Exchange, Result, Symbol, TorrentError, ASSET_CONSTANT_MULTIPLIER, DATA_FEED,
@@ -8,7 +8,6 @@ use crate::websocket::{MessageCallback, Wss};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::ops::Deref;
-use regex::Regex;
 use std::result;
 use zenoh::prelude::sync::SyncResolve;
 use zenoh::prelude::Encoding;
@@ -16,8 +15,8 @@ use zenoh::prelude::Encoding;
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Message {
-    Failure(FailureMessage),
-    Books(BasePublicResponse<Orderbook>),
+    Subscribe(SubscribeMessage),
+    Orderbook(PublicResponse<OrderbookEvent>),
 }
 
 #[derive(Debug)]
@@ -68,76 +67,86 @@ impl<'de> serde::de::Visitor<'de> for LevelUpdateVisitor {
         Ok(LevelUpdate(arr))
     }
 }
+
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct FailureMessage {
-    pub event: String,
-    pub code: String,
-    pub msg: String,
-    pub conn_id: String,
+pub struct SubscribeMessage {
+    success: bool,
+    ret_msg: String,
+    conn_id: String,
+    op: String,
+    req_id: Option<String>,
 }
 
-/// The base response which contains common fields of public channels.
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
-pub struct BasePublicResponse<Data> {
-    /// Topic name.
-    pub topic: String,
-    /// Data type. `snapshot`, `delta`.
-    #[serde(alias = "type")]
-    pub type_: String,
-    /// The timestamp (ms) that the system generates the data.
-    pub ts: u64,
-    /// The data vary on the topic.
-    pub data: Data,
-}
-
-/// The orderbook data.
-#[derive(Deserialize, Debug)]
-pub struct Orderbook{
-    /// Symbol name.
+pub struct OrderbookEvent {
+    /// Symbol name
     pub s: String,
-    /// Bids. For `snapshot` stream, the element is sorted by price in descending order.
+    /// Bids. For `snapshot` stream, the element is sorted by price in descending order
     pub b: Vec<LevelUpdate>,
-    /// Asks. For `snapshot` stream, the element is sorted by price in ascending order.
+    /// Asks. For `snapshot` stream, the element is sorted by price in ascending order
     pub a: Vec<LevelUpdate>,
-    /// Update ID. Is a sequence.
-    /// Occasionally, you'll receive "u"=1, which is a snapshot data due to the restart of the service.
-    /// So please overwrite your local orderbook.
-    pub u: u64,
-    /// Cross sequence. Option does not have this field.
+    /// Update ID, which is a sequence. Occasionally, you'll receive "u"=1, which is a
+    /// snapshot data due to the restart of the service
+    u: u64,
+    /// Cross sequence.
+    /// You can use this field to compare different levels orderbook data, and for the smaller seq,
+    /// then it means the data is generated earlier
     pub seq: Option<u64>,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct PublicResponse<Data> {
+    /// Topic name
+    pub topic: String,
+    /// Data type: `snapshot`, `delta`
+    pub r#type: String,
+    /// The timestamp in (ms) that the system generates the data
+    pub ts: u64,
+    /// Type to deserialise data from `Bybit` websocket stream
+    pub data: Data,
+    /// The timestamp from the match engine when this orderbook data is produced
+    /// It can be correlated with T from public trade channel
+    pub cts: Option<u64>,
+}
+
 #[derive(Debug, Serialize)]
-struct Sub {
+#[serde(rename_all = "camelCase")]
+struct Subscription {
+    req_id: String,
     op: String,
     args: Vec<String>,
 }
 
-impl Sub {
-    pub(crate) fn new(op: String, args: Vec<String>) -> Self {
-        Self { op, args}
-    }
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Depth {
+    ONE,
+    FIFTY,
+    TWO_HUNDRED,
 }
-
 
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Channel {
-    // (depth, symbol)
-    Orderbook(u8, String),
+    ORDERBOOK(Depth),
 }
 
 impl Display for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Channel::Orderbook(depth, symbol) => write!(f, "orderbook.{}.{}", depth, symbol),
+            Channel::ORDERBOOK(depth) => match depth {
+                Depth::ONE => write!(f, "orderbook.1"),
+                Depth::FIFTY => write!(f, "orderbook.50"),
+                Depth::TWO_HUNDRED => write!(f, "orderbook.200"),
+            },
         }
     }
 }
 
 #[derive(Default, Debug)]
-pub struct Bybit;
+pub struct Bybit(usize);
 
 impl Display for Bybit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -146,28 +155,39 @@ impl Display for Bybit {
 }
 
 impl Bybit {
-    
-    pub const URL: &'static str = "wss://stream.bybit.com/v5/public/linear";
+    pub const URL: &'static str = "wss://stream.bybit.com/v5/public/spot";
 
     pub fn new() -> Self {
-        Self {}
+        Self(0)
     }
 }
 
 impl Wss for Bybit {
     fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String> {
-        
-        let sub = Sub::new(
-            "subscribe".to_string(),
-            vec![channel],
-        );
+        let args = topics
+            .into_iter()
+            .filter_map(|t| {
+                let parts = t.split('-').collect::<Vec<&str>>();
+                if parts.len() == 2 {
+                    Some(parts.join(""))
+                } else {
+                    None
+                }
+            })
+            .map(|sym| format!("{}.{}", channel, sym.to_uppercase()))
+            .collect::<Vec<String>>();
+        let sub = Subscription {
+            req_id: self.0.to_string(),
+            op: "subscribe".to_string(),
+            args,
+        };
+        self.0 += 1;
 
         match serde_json::to_string(&sub) {
             Ok(s) => Ok(s),
             Err(e) => Err(TorrentError::BadParse(format!("serde parse error: {}", e))),
         }
     }
-
     fn to_enum(&self) -> Exchange {
         Exchange::BYBIT
     }
@@ -197,28 +217,12 @@ impl Manager {
 impl MessageCallback<Message> for Manager {
     fn message_callback(&mut self, msg: Result<Message>) -> Result<()> {
         match msg? {
-            Message::Failure(m) => {
-                if m.msg.contains("Invalid request") {
-                    return Err(TorrentError::BadRequest(format!("{:?}", m)));
-                } else if m.msg.contains("Connection refused") {
-                    // TODO: Sleep then reconnect
-                    panic!("{:?}", m);
-                }
-                // TODO: handle it better
-                panic!("{:?}", m);
-            }
-            Message::Books(update) => {
-                let mut is_snapshot = false;
+            Message::Orderbook(update) => {
+                let is_snapshot = update.r#type == "snapshot";
                 let symbol = update.data.s;
-                if update.type_ == "snapshot" {
-                    is_snapshot = true;
-                        let _ = self.transmit(symbol, update.data.b, update.data.a, is_snapshot);
-                } else {
-                    let _ = self.transmit(symbol, update.data.b, update.data.a, is_snapshot);
-                }
-
+                let _ = self.transmit(symbol, update.data.b, update.data.a, is_snapshot);
             }
-            _ => {}
+            Message::Subscribe(_) => {}
         }
         Ok(())
     }
@@ -226,27 +230,18 @@ impl MessageCallback<Message> for Manager {
 
 impl Transmitor<Vec<LevelUpdate>> for Manager {
     fn resolve_symbol(&self, symbol: &Symbol) -> Option<CcyPair> {
-        // Create the regex pattern
-        let re = Regex::new(r"^(\w+)(BTC|TRY|ETH|BNB|USDT|PAX|TUSD|USDC|XRP|USDS)$").unwrap();
-        let symbol_str: &str = symbol;
-        // Check for matches in the symbol
-        if let Some(captures) = re.captures(symbol_str) {
-            if let (Some(base), Some(quote)) = (captures.get(1), captures.get(2)) {
-                return Some(CcyPair {
-                    base: base.as_str().to_string(),
-                    quote: quote.as_str().to_string(),
-                    product: "futures".to_string(),
-                });
-            }
-        }
+        let regex =
+            regex::Regex::new(r"^(\w+)(BTC|TRY|ETH|BNB|USDT|PAX|TUSD|USDC|XRP|USDS)$").ok()?;
+        let capture = regex.captures(symbol)?;
+        let (base, quote) = (capture.get(1)?, capture.get(2)?);
 
-        // If the quote is not found, panic with an error message
-        panic!(
-            "Quote not found in the symbol: {}, Please add before running again",
-            symbol
-        );
+        return Some(CcyPair {
+            base: base.as_str().to_string(),
+            quote: quote.as_str().to_string(),
+            product: "spot".to_string(),
+        });
     }
-    
+
     fn standardise_updates(&self, updates: Vec<LevelUpdate>) -> Vec<Level> {
         updates
             .into_iter()

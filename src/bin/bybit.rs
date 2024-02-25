@@ -1,4 +1,4 @@
-use async_wss::bybit::{Channel as BybitChannel, Manager as BybitManager};
+use async_wss::bybit::{Channel as BybitChannel, Depth, Manager as BybitManager};
 use async_wss::utils::Exchange;
 use async_wss::websocket::WebSocketClient;
 
@@ -16,7 +16,7 @@ async fn main() {
     let socket_reader = wss.connect(Exchange::BYBIT).await.unwrap();
     let listener = WebSocketClient::listen_with(socket_reader, manager);
 
-    wss.subscribe(BybitChannel::Orderbook(50,"BTCUSDT".to_string()).to_string(), products)
+    wss.subscribe(BybitChannel::ORDERBOOK(Depth::FIFTY).to_string(), products)
         .await
         .unwrap();
 
