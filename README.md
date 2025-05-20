@@ -1,4 +1,4 @@
-# Async-WSS
+# torrent-rs
 
 ## Run
 
