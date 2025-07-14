@@ -1,6 +1,6 @@
 use crate::binance::{Binance, Channel, Spot, API};
-use crate::coinbase::Coinbase;
 use crate::bybit::Bybit;
+use crate::coinbase::Coinbase;
 use crate::okx::Okx;
 use crate::rest::RestClient;
 use crate::utils::{Exchange, Result, Symbol, TorrentError};
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt::{Debug, Display};
 use std::marker;
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::mpsc};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{self},
@@ -31,6 +31,9 @@ pub trait MessageCallback<T> {
 pub trait Wss: Display {
     fn subscribe(&mut self, channel: String, topics: Vec<String>) -> Result<String>;
     fn to_enum(&self) -> Exchange;
+    fn ping_routine(&self) -> Option<PingRoutine> {
+        None
+    }
 }
 
 #[derive(Default)]
@@ -60,7 +63,6 @@ impl WebSocketClient {
             Exchange::OKX => Okx::URL,
             Exchange::BINANCE => Binance::URL,
             Exchange::BYBIT => Bybit::URL,
-
         };
 
         let reader = match connect_async(url).await {
@@ -101,6 +103,17 @@ impl WebSocketClient {
             }
         };
 
+        /*
+        if let Some(exchange) = self.exchange {
+            if let Some(ping_routine) = exchange.ping_routine() {
+                let socket_w = self
+                    .socket_w
+                    .expect("connected exchange must have writer socket");
+
+                tokio::spawn(schedule_pings(ping_routine));
+            }
+        }
+        */
         Ok(reader)
     }
 
@@ -289,5 +302,48 @@ where
         }
         self.user_manager.depth_callback(msg, None);
         Ok(())
+    }
+}
+
+pub struct PingRoutine {
+    interval: tokio::time::Interval,
+    ping_fn: fn() -> tungstenite::Message,
+}
+
+async fn distribute_msgs(
+    mut socket_w: SocketWriter,
+    mut socket_w_rx: mpsc::UnboundedReceiver<tungstenite::Message>,
+) {
+    while let Some(msg) = socket_w_rx.recv().await {
+        if let Err(e) = socket_w.send(msg).await {
+            if matches!(
+                e,
+                tungstenite::Error::ConnectionClosed
+                    | tungstenite::Error::AlreadyClosed
+                    | tungstenite::Error::Io(_)
+                    | tungstenite::Error::Protocol(
+                        tungstenite::error::ProtocolError::SendAfterClosing
+                    )
+            ) {
+                break;
+            }
+            eprintln!("failed to write to exchange wss");
+        }
+    }
+}
+
+async fn schedule_pings(
+    socket_w_tx: mpsc::UnboundedSender<tungstenite::Message>,
+    PingRoutine {
+        mut interval,
+        ping_fn,
+    }: PingRoutine,
+) {
+    loop {
+        interval.tick().await;
+        let payload = ping_fn();
+        if socket_w_tx.send(payload).is_err() {
+            break;
+        }
     }
 }
